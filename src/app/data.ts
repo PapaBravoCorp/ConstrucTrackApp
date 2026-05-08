@@ -162,15 +162,19 @@ import { projectId } from '/utils/supabase/info.tsx';
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-9bb778f6`;
 
-export const fetchProjects = async (): Promise<Project[]> => {
+export const fetchProjects = async (token?: string): Promise<Project[]> => {
   try {
-    const res = await fetch(`${API_BASE}/kv/projects`);
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const res = await fetch(`${API_BASE}/kv/projects`, { headers });
     const data = await res.json();
     if (data.value) {
       return data.value;
     } else {
       // Initialize with mock data if empty
-      await saveProjects(MOCK_PROJECTS);
+      await saveProjects(MOCK_PROJECTS, token);
       return MOCK_PROJECTS;
     }
   } catch (err) {
@@ -179,11 +183,15 @@ export const fetchProjects = async (): Promise<Project[]> => {
   }
 };
 
-export const saveProjects = async (projects: Project[]) => {
+export const saveProjects = async (projects: Project[], token?: string) => {
   try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
     await fetch(`${API_BASE}/kv/projects`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ value: projects })
     });
   } catch (err) {

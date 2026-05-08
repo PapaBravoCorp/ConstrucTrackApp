@@ -1,0 +1,9 @@
+{
+  "deno.enable": true,
+  "deno.enablePaths": [
+    "supabase"
+  ],
+  "deno.path": "C:\\Users\\Prabodh.Bharose\\.deno\\bin\\deno.exe",
+  "deno.lint": true,
+  "deno.unstable": true
+}

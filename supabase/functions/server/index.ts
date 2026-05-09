@@ -1,11 +1,9 @@
-import { Hono } from "npm:hono";
-import { cors } from "npm:hono/cors";
+import { Hono, Context } from "npm:hono";
 import { logger } from "npm:hono/logger";
+import { cors } from "npm:hono/cors";
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
-import { authMiddleware } from "./middleware/auth.ts";
-import * as kv from "./kv_store.tsx";
 
-// Route modules
+import { authMiddleware } from "./middleware/auth.ts";
 import projectRoutes from "./routes/projects.ts";
 import userRoutes from "./routes/users.ts";
 import templateRoutes from "./routes/templates.ts";
@@ -13,9 +11,13 @@ import milestoneRoutes from "./routes/milestones.ts";
 import notificationRoutes from "./routes/notifications.ts";
 import activityRoutes from "./routes/activity.ts";
 
+import { kv } from "./kv_store.tsx";
+
 const app = new Hono();
 
-const BASE = "/make-server-9bb778f6";
+// This handles the Supabase function name prefix
+const api = new Hono().basePath("/api");
+const auth = new Hono().basePath("/auth");
 
 // Enable logger
 app.use("*", logger(console.log));
@@ -37,12 +39,11 @@ app.use(
 // =========================================================
 
 // Health check endpoint
-app.get(`${BASE}/health`, (c) => {
-  return c.json({ status: "ok", timestamp: new Date().toISOString() });
-});
+app.get("/health", (c: Context) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
+app.get("/server/health", (c: Context) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
 
-// Password reset request (public — user may not be logged in)
-app.post(`${BASE}/auth/reset-password`, async (c) => {
+// Password reset request (public)
+auth.post("/reset-password", async (c: Context) => {
   try {
     const { email } = await c.req.json();
     if (!email) {
@@ -50,7 +51,7 @@ app.post(`${BASE}/auth/reset-password`, async (c) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const supabaseServiceKey = Deno.env.get("SERVICE_ROLE_KEY");
     if (!supabaseUrl || !supabaseServiceKey) {
       return c.json({ error: "Server configuration error" }, 500);
     }
@@ -62,7 +63,7 @@ app.post(`${BASE}/auth/reset-password`, async (c) => {
       return c.json({ error: error.message }, 400);
     }
 
-    return c.json({ success: true, message: "Password reset email sent" });
+    return c.json({ message: "Password reset email sent" });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
@@ -72,7 +73,7 @@ app.post(`${BASE}/auth/reset-password`, async (c) => {
 // LEGACY KV STORE ENDPOINTS (kept for backward compatibility)
 // =========================================================
 
-app.get(`${BASE}/kv/:key`, async (c) => {
+const handleKV = async (c: Context) => {
   try {
     const key = c.req.param("key");
     const value = await kv.get(key);
@@ -80,46 +81,39 @@ app.get(`${BASE}/kv/:key`, async (c) => {
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
-});
+};
 
-app.post(`${BASE}/kv/:key`, async (c) => {
-  try {
-    const key = c.req.param("key");
-    const { value } = await c.req.json();
-    await kv.set(key, value);
-    return c.json({ success: true });
-  } catch (err: any) {
-    return c.json({ error: err.message }, 500);
-  }
-});
-
-app.get(`${BASE}/kv/prefix/:prefix`, async (c) => {
-  try {
-    const prefix = c.req.param("prefix");
-    const values = await kv.getByPrefix(prefix);
-    return c.json({ values });
-  } catch (err: any) {
-    return c.json({ error: err.message }, 500);
-  }
-});
+app.get("/kv/:key", handleKV);
+app.get("/server/kv/:key", handleKV);
 
 // =========================================================
-// AUTHENTICATED ROUTES (JWT required)
+// PROTECTED API ROUTES (require authentication)
 // =========================================================
 
-// Apply auth middleware to all /api/* routes
-app.use(`${BASE}/api/*`, authMiddleware);
+// Apply auth middleware to all /api routes
+api.use("/*", authMiddleware);
 
-// Mount route modules
-app.route(`${BASE}/api/projects`, projectRoutes);
-app.route(`${BASE}/api/users`, userRoutes);
-app.route(`${BASE}/api/templates`, templateRoutes);
-app.route(`${BASE}/api/milestones`, milestoneRoutes);
-app.route(`${BASE}/api/notifications`, notificationRoutes);
-app.route(`${BASE}/api/activity`, activityRoutes);
+// Mount modules to the api sub-app
+api.route("/projects", projectRoutes);
+api.route("/users", userRoutes);
+api.route("/templates", templateRoutes);
+api.route("/milestones", milestoneRoutes);
+api.route("/notifications", notificationRoutes);
+api.route("/activity", activityRoutes);
+
+// =========================================================
+// MOUNT SUB-APPS TO MAIN APP
+// =========================================================
+
+app.route("/", auth);
+app.route("/server", auth);
+app.route("/", api);
+app.route("/server", api);
 
 // =========================================================
 // START SERVER
 // =========================================================
 
-Deno.serve(app.fetch);
+Deno.serve(async (req: Request) => {
+  return app.fetch(req);
+});

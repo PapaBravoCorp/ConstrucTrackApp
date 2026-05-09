@@ -13,8 +13,8 @@ CREATE TABLE kv_store_9bb778f6 (
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 
 const client = () => createClient(
-  Deno.env.get("SUPABASE_URL"),
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SERVICE_ROLE_KEY")!,
 );
 
 // Set stores a key-value pair in the database.
@@ -85,3 +85,5 @@ export const getByPrefix = async (prefix: string): Promise<any[]> => {
   }
   return data?.map((d) => d.value) ?? [];
 };
+
+export const kv = { get, set, del, mget, mset, mdel, getByPrefix };

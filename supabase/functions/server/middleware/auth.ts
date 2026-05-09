@@ -16,7 +16,7 @@ export async function authMiddleware(c: Context, next: Next) {
   const token = authHeader.replace("Bearer ", "");
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const supabaseServiceKey = Deno.env.get("SERVICE_ROLE_KEY");
 
   if (!supabaseUrl || !supabaseServiceKey) {
     return c.json({ error: "Server configuration error" }, 500);
@@ -83,6 +83,6 @@ export function requireRole(...roles: string[]) {
 export function getServiceClient() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    Deno.env.get("SERVICE_ROLE_KEY")!
   );
 }

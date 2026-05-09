@@ -3,9 +3,10 @@
  * Handles auth headers, base URL, and typed request/response.
  */
 import { supabase } from './supabaseClient';
-import { projectId } from '/utils/supabase/info.tsx';
+import { projectId } from '../../utils/supabase/info';
 
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-9bb778f6/api`;
+// const API_BASE = `http://localhost:8000/make-server-9bb778f6/api`;
+const API_BASE = `https://${projectId}.supabase.co/functions/v1/server/api`;
 
 // ─── Helpers ─────────────────────────────────────────────
 

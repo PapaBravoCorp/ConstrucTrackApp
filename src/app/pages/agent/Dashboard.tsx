@@ -1,20 +1,24 @@
 import React from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../../auth';
-import { getProjectsForUser } from '../../data';
 import { useProjects } from '../../projectsContext';
 import { MapPin, Clock, ChevronRight, CheckCircle, Navigation, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
 
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
 export function AgentDashboard() {
   const { user } = useAuth();
-  const { projects: allProjects, loading } = useProjects();
+  const { projects, loading } = useProjects();
   
   if (loading) {
     return <div className="p-10 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-600" /></div>;
   }
-
-  const projects = user ? getProjectsForUser(user, allProjects) : [];
 
   return (
     <div className="p-4 pb-24 md:p-6 min-h-screen bg-gray-50">
@@ -24,7 +28,7 @@ export function AgentDashboard() {
             {user?.name.charAt(0)}
           </div>
           <div>
-            <h1 className="text-lg font-bold text-gray-900">Good morning,</h1>
+            <h1 className="text-lg font-bold text-gray-900">{getGreeting()},</h1>
             <p className="text-sm font-medium text-gray-600">{user?.name}</p>
           </div>
         </div>
@@ -35,7 +39,6 @@ export function AgentDashboard() {
 
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-base font-semibold text-gray-900">Assigned Projects</h2>
-        <button className="text-sm text-blue-600 font-medium hover:underline">View All</button>
       </div>
 
       <div className="space-y-4">
@@ -65,7 +68,7 @@ export function AgentDashboard() {
                     <svg className="w-12 h-12 absolute -top-1 -left-1" viewBox="0 0 36 36">
                       <path
                         className={`${project.status === 'Delayed' ? 'text-orange-500' : 'text-blue-600'}`}
-                        strokeDasharray={`${project.percentDone}, 100`}
+                        strokeDasharray={`${project.percent_done}, 100`}
                         d="M18 2.0845
                           a 15.9155 15.9155 0 0 1 0 31.831
                           a 15.9155 15.9155 0 0 1 0 -31.831"
@@ -74,7 +77,7 @@ export function AgentDashboard() {
                         strokeWidth="4"
                       />
                     </svg>
-                    <span className="text-xs font-bold text-gray-700 relative z-10">{project.percentDone}%</span>
+                    <span className="text-xs font-bold text-gray-700 relative z-10">{project.percent_done}%</span>
                   </div>
                 )}
               </div>
@@ -82,7 +85,7 @@ export function AgentDashboard() {
               <div className="pt-4 mt-2 border-t border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-xs font-medium text-gray-600 bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-200">
                   <Clock className="w-3.5 h-3.5 text-gray-400" />
-                  Due {new Date(project.endDate).toLocaleDateString()}
+                  Due {new Date(project.end_date).toLocaleDateString()}
                 </div>
                 <div className="flex items-center gap-1.5 text-sm font-semibold text-blue-600">
                   Update <ChevronRight className="w-4 h-4" />
@@ -100,11 +103,6 @@ export function AgentDashboard() {
           </div>
         )}
       </div>
-
-      {/* Floating Action Button for quick scan or map (optional for agents) */}
-      <button className="fixed bottom-6 right-4 w-14 h-14 bg-orange-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-orange-700 active:scale-95 transition-all md:hidden z-20">
-        <Navigation className="w-6 h-6" />
-      </button>
     </div>
   );
 }

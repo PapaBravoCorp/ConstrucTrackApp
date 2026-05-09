@@ -1,7 +1,8 @@
 import React from 'react';
 import { Outlet, Navigate, useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../auth';
-import { Menu, Bell, User as UserIcon, LogOut, ArrowLeft } from 'lucide-react';
+import { User as UserIcon, LogOut, ArrowLeft } from 'lucide-react';
+import { NotificationPanel } from './NotificationPanel';
 
 export function AppShell() {
   const { user, loading, logout } = useAuth();
@@ -32,16 +33,13 @@ export function AppShell() {
               C
             </div>
           )}
-          <span className="font-semibold text-lg text-slate-900 tracking-tight">ConstructTrack</span>
+          <span className="font-semibold text-lg text-slate-900 tracking-tight">ConstrucTrack</span>
         </div>
         
         <div className="flex items-center gap-2">
-          {(user.role === 'Admin' || user.role === 'Manager') && (
-            <button className="p-2 rounded-full hover:bg-gray-100 transition-colors relative">
-              <Bell className="w-5 h-5 text-gray-600" />
-              <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-orange-500 rounded-full border-2 border-white"></span>
-            </button>
-          )}
+          {/* Notification bell for all roles */}
+          <NotificationPanel />
+
           <div className="relative group">
             <button className="p-2 rounded-full hover:bg-gray-100 transition-colors flex items-center gap-2">
               <div className="w-7 h-7 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-medium text-sm">

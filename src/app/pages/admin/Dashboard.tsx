@@ -1,9 +1,16 @@
 import React from 'react';
 import { Link } from 'react-router';
-import { Building, LayoutTemplate, Users, ChevronRight } from 'lucide-react';
+import { Building, LayoutTemplate, Users, ChevronRight, Clock, History } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useProjects } from '../../projectsContext';
 
 export function AdminDashboard() {
+  const { projects } = useProjects();
+
+  const activeCount = projects.filter(p => p.status !== 'Completed').length;
+  const delayedCount = projects.filter(p => p.status === 'Delayed').length;
+  const completedCount = projects.filter(p => p.status === 'Completed').length;
+
   const adminActions = [
     {
       title: 'Projects',
@@ -23,8 +30,15 @@ export function AdminDashboard() {
       title: 'Users & Roles',
       desc: 'Access control and team mapping',
       icon: <Users className="w-8 h-8 text-purple-600" />,
-      link: '#',
+      link: '/admin/users',
       bgColor: 'bg-purple-50',
+    },
+    {
+      title: 'Activity Log',
+      desc: 'Audit trail of all platform actions',
+      icon: <History className="w-8 h-8 text-green-600" />,
+      link: '/admin/activity',
+      bgColor: 'bg-green-50',
     },
   ];
 
@@ -35,7 +49,7 @@ export function AdminDashboard() {
         <p className="text-sm text-gray-500 mt-1">Manage platform settings, projects, and users.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
         {adminActions.map((action, idx) => (
           <motion.div
             key={action.title}
@@ -62,23 +76,28 @@ export function AdminDashboard() {
         ))}
       </div>
       
-      {/* Quick stats could go here */}
+      {/* Live stats */}
       <div className="mt-8">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">System Overview</h2>
         <div className="bg-white border border-gray-200 rounded-2xl p-6 flex flex-col md:flex-row gap-6 justify-around">
           <div className="text-center">
-            <p className="text-3xl font-bold text-gray-900">24</p>
+            <p className="text-3xl font-bold text-gray-900">{activeCount}</p>
             <p className="text-sm text-gray-500">Active Projects</p>
           </div>
           <div className="hidden md:block w-px bg-gray-200"></div>
           <div className="text-center">
-            <p className="text-3xl font-bold text-gray-900">142</p>
-            <p className="text-sm text-gray-500">Total Users</p>
+            <p className="text-3xl font-bold text-green-600">{completedCount}</p>
+            <p className="text-sm text-gray-500">Completed</p>
           </div>
           <div className="hidden md:block w-px bg-gray-200"></div>
           <div className="text-center">
-            <p className="text-3xl font-bold text-orange-600">3</p>
+            <p className="text-3xl font-bold text-orange-600">{delayedCount}</p>
             <p className="text-sm text-gray-500">Delayed Sites</p>
+          </div>
+          <div className="hidden md:block w-px bg-gray-200"></div>
+          <div className="text-center">
+            <p className="text-3xl font-bold text-blue-600">{projects.length}</p>
+            <p className="text-sm text-gray-500">Total Projects</p>
           </div>
         </div>
       </div>

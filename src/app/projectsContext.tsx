@@ -1,62 +1,53 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { Project, fetchProjects, saveProjects } from './data';
-import { useAuth } from './auth';
-import { supabase } from './supabaseClient';
+import { useState, useEffect, createContext, useContext, ReactNode, useCallback } from 'react';
+import { fetchProjects as apiFetchProjects, updateProject as apiUpdateProject, deleteProject as apiDeleteProject } from './api';
+import type { Project } from './api';
 
 interface ProjectContextType {
   projects: Project[];
   loading: boolean;
-  updateProject: (updatedProject: Project) => Promise<void>;
-  addProject: (newProject: Project) => Promise<void>;
+  error: string | null;
+  refreshProjects: () => Promise<void>;
+  updateProject: (id: string, data: any) => Promise<void>;
+  deleteProject: (id: string) => Promise<void>;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
-  const { user, loading: authLoading } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refreshProjects = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await apiFetchProjects();
+      setProjects(data);
+    } catch (err: any) {
+      console.error('Error fetching projects:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const loadData = async () => {
-      if (authLoading) return;
-      if (!user) {
-        setProjects([]);
-        setLoading(false);
-        return;
-      }
+    refreshProjects();
+  }, [refreshProjects]);
 
-      setLoading(true);
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const data = await fetchProjects(session?.access_token);
-        setProjects(data);
-      } catch (err) {
-        console.error("Failed to load projects:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
-  }, [user, authLoading]);
-
-  const updateProject = async (updatedProject: Project) => {
-    const newProjects = projects.map(p => p.id === updatedProject.id ? updatedProject : p);
-    setProjects(newProjects);
-    const { data: { session } } = await supabase.auth.getSession();
-    await saveProjects(newProjects, session?.access_token);
+  const updateProject = async (id: string, data: any) => {
+    await apiUpdateProject(id, data);
+    await refreshProjects();
   };
 
-  const addProject = async (newProject: Project) => {
-    const newProjects = [...projects, newProject];
-    setProjects(newProjects);
-    const { data: { session } } = await supabase.auth.getSession();
-    await saveProjects(newProjects, session?.access_token);
+  const deleteProject = async (id: string) => {
+    await apiDeleteProject(id);
+    setProjects(prev => prev.filter(p => p.id !== id));
   };
 
   return (
-    <ProjectContext.Provider value={{ projects, loading, updateProject, addProject }}>
+    <ProjectContext.Provider value={{ projects, loading, error, refreshProjects, updateProject, deleteProject }}>
       {children}
     </ProjectContext.Provider>
   );

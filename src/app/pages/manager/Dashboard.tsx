@@ -1,22 +1,17 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router';
 import { Search, Clock, AlertTriangle, CheckCircle, BarChart3, ChevronRight, Loader2 } from 'lucide-react';
-import { useAuth } from '../../auth';
-import { getProjectsForUser } from '../../data';
 import { useProjects } from '../../projectsContext';
 import { motion } from 'motion/react';
 
 export function ManagerDashboard() {
-  const { user } = useAuth();
-  const { projects: allProjects, loading } = useProjects();
+  const { projects, loading } = useProjects();
   const [searchTerm, setSearchTerm] = useState('');
   
   if (loading) {
     return <div className="p-10 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>;
   }
 
-  const projects = user ? getProjectsForUser(user, allProjects) : [];
-  
   const filteredProjects = projects.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     p.status.toLowerCase().includes(searchTerm.toLowerCase())
@@ -57,7 +52,7 @@ export function ManagerDashboard() {
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
           <p className="text-sm font-medium text-gray-500">Avg Completion</p>
           <p className="text-2xl font-bold text-blue-600 mt-1">
-            {Math.round(projects.reduce((acc, p) => acc + p.percentDone, 0) / (projects.length || 1))}%
+            {Math.round(projects.reduce((acc, p) => acc + p.percent_done, 0) / (projects.length || 1))}%
           </p>
         </div>
       </div>
@@ -102,11 +97,11 @@ export function ManagerDashboard() {
               <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
                 <div className="flex items-center gap-1.5">
                   <Clock className="w-4 h-4 text-gray-400" />
-                  <span>Due {new Date(project.endDate).toLocaleDateString()}</span>
+                  <span>Due {new Date(project.end_date).toLocaleDateString()}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <BarChart3 className="w-4 h-4 text-gray-400" />
-                  <span>{project.milestones.length} Milestones</span>
+                  <span>{project.milestones?.length || 0} Milestones</span>
                 </div>
               </div>
 
@@ -114,12 +109,12 @@ export function ManagerDashboard() {
                 <div className="flex-1">
                   <div className="flex justify-between text-sm mb-1.5">
                     <span className="font-medium text-gray-700">Completion</span>
-                    <span className="font-bold text-gray-900">{project.percentDone}%</span>
+                    <span className="font-bold text-gray-900">{project.percent_done}%</span>
                   </div>
                   <div className="w-full bg-gray-100 rounded-full h-2">
                     <div 
                       className={`h-2 rounded-full transition-all duration-500 ${project.status === 'Delayed' ? 'bg-orange-500' : 'bg-blue-600'}`}
-                      style={{ width: `${project.percentDone}%` }}
+                      style={{ width: `${project.percent_done}%` }}
                     />
                   </div>
                 </div>
@@ -130,6 +125,14 @@ export function ManagerDashboard() {
             </Link>
           </motion.div>
         ))}
+
+        {filteredProjects.length === 0 && (
+          <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+            <BarChart3 className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <h3 className="text-lg font-medium text-gray-900">No projects found</h3>
+            <p className="text-gray-500 mt-1 text-sm">You haven't been assigned to any projects yet.</p>
+          </div>
+        )}
       </div>
     </div>
   );

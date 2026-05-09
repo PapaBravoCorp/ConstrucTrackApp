@@ -102,6 +102,19 @@ export function TemplatesLibrary() {
     }
   };
 
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef = React.useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   if (loading) {
     return <div className="p-10 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>;
   }
@@ -133,24 +146,46 @@ export function TemplatesLibrary() {
               <div className="p-3 bg-orange-50 text-orange-600 rounded-lg">
                 <LayoutTemplate className="w-6 h-6" />
               </div>
-              <div className="relative group/menu">
-                <button className="text-gray-400 hover:text-gray-600 p-1">
+              <div className="relative">
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenMenuId(openMenuId === tpl.id ? null : tpl.id);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                >
                   <MoreVertical className="w-5 h-5" />
                 </button>
-                <div className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-100 opacity-0 invisible group-hover/menu:opacity-100 group-hover/menu:visible transition-all z-10">
-                  <button onClick={() => openEditDialog(tpl)}
-                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                    <Edit className="w-3.5 h-3.5" /> Edit
-                  </button>
-                  <button onClick={() => handleDuplicate(tpl)}
-                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                    <Copy className="w-3.5 h-3.5" /> Duplicate
-                  </button>
-                  <button onClick={() => setDeleteConfirm(tpl.id)}
-                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
-                    <Trash2 className="w-3.5 h-3.5" /> Delete
-                  </button>
-                </div>
+                {openMenuId === tpl.id && (
+                  <div 
+                    ref={menuRef}
+                    className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-xl border border-gray-100 z-20 overflow-hidden py-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button 
+                      onClick={() => { setOpenMenuId(null); openEditDialog(tpl); }}
+                      className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
+                    >
+                      <Edit className="w-4 h-4 text-blue-500" /> 
+                      <span className="font-medium">Edit Template</span>
+                    </button>
+                    <button 
+                      onClick={() => { setOpenMenuId(null); handleDuplicate(tpl); }}
+                      className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
+                    >
+                      <Copy className="w-4 h-4 text-green-500" /> 
+                      <span className="font-medium">Duplicate</span>
+                    </button>
+                    <div className="border-t border-gray-50 my-1"></div>
+                    <button 
+                      onClick={() => { setOpenMenuId(null); setDeleteConfirm(tpl.id); }}
+                      className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" /> 
+                      <span className="font-medium">Delete</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             

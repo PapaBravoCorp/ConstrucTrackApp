@@ -149,38 +149,34 @@ users.put("/:id", requireRole("Admin"), async (c) => {
   return c.json({ data });
 });
 
-// DELETE /users/:id — deactivate user (admin only)
+// DELETE /users/:id — permanently delete user (admin only)
 users.delete("/:id", requireRole("Admin"), async (c) => {
   const id = c.req.param("id");
   const adminUser = c.get("user");
   const supabase = getServiceClient();
 
-  // Don't allow self-deactivation
+  // Don't allow self-deletion
   if (id === adminUser.id) {
-    return c.json({ error: "Cannot deactivate your own account" }, 400);
+    return c.json({ error: "Cannot delete your own account" }, 400);
   }
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .update({ is_active: false, updated_at: new Date().toISOString() })
-    .eq("id", id)
-    .select()
-    .single();
+  // 1. Delete from Auth (this will cascade to profiles due to our foreign key)
+  const { error: authError } = await supabase.auth.admin.deleteUser(id);
 
-  if (error) {
-    return c.json({ error: error.message }, 500);
+  if (authError) {
+    return c.json({ error: `Auth Error: ${authError.message}` }, 500);
   }
 
   // Activity log
   await supabase.from("activity_log").insert({
     user_id: adminUser.id,
-    action: "deactivated",
+    action: "deleted",
     entity_type: "user",
     entity_id: id,
-    details: { name: data.name },
+    details: { id },
   });
 
-  return c.json({ data });
+  return c.json({ success: true, message: "User deleted permanently" });
 });
 
 export default users;

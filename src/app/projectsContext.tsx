@@ -1,5 +1,6 @@
 import { useState, useEffect, createContext, useContext, ReactNode, useCallback } from 'react';
 import { fetchProjects as apiFetchProjects, updateProject as apiUpdateProject, deleteProject as apiDeleteProject } from './api';
+import { useAuth } from './auth';
 import type { Project } from './api';
 
 interface ProjectContextType {
@@ -14,11 +15,13 @@ interface ProjectContextType {
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refreshProjects = useCallback(async () => {
+    if (!user) return;
     try {
       setLoading(true);
       setError(null);
@@ -30,11 +33,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
-    refreshProjects();
-  }, [refreshProjects]);
+    if (user) {
+      refreshProjects();
+    } else {
+      setProjects([]);
+      setLoading(false);
+    }
+  }, [user, refreshProjects]);
 
   const updateProject = async (id: string, data: any) => {
     await apiUpdateProject(id, data);

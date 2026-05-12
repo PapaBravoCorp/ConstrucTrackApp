@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Search, Shield, Briefcase, HardHat, MoreVertical, UserPlus, X, Loader2, Check, Ban } from 'lucide-react';
-import { fetchUsers, createUser, updateUser, deactivateUser } from '../../api';
+import { Users, Plus, Search, Shield, Briefcase, HardHat, MoreVertical, UserPlus, X, Loader2, Check, Ban, Trash2 } from 'lucide-react';
+import { fetchUsers, createUser, updateUser, deleteUser } from '../../api';
 import type { Profile, Role } from '../../api';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
@@ -10,6 +10,11 @@ export function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<Role | 'All'>('All');
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef = React.useRef<HTMLDivElement | null>(null);
+
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
 
@@ -22,6 +27,13 @@ export function UserManagement() {
 
   useEffect(() => {
     loadUsers();
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const loadUsers = async () => {
@@ -76,16 +88,25 @@ export function UserManagement() {
 
   const handleToggleActive = async (user: Profile) => {
     try {
-      if (user.is_active) {
-        await deactivateUser(user.id);
-        toast.success(`${user.name} has been deactivated`);
-      } else {
-        await updateUser(user.id, { isActive: true });
-        toast.success(`${user.name} has been reactivated`);
-      }
+      await updateUser(user.id, { isActive: !user.is_active });
+      toast.success(`${user.name} has been ${!user.is_active ? 'reactivated' : 'deactivated'}`);
       await loadUsers();
     } catch (err: any) {
       toast.error(err.message || 'Failed to update user');
+    }
+  };
+
+  const handleDeleteUser = async (id: string) => {
+    setDeleting(true);
+    try {
+      await deleteUser(id);
+      toast.success('User deleted permanently');
+      setDeleteConfirm(null);
+      await loadUsers();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete user');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -181,16 +202,17 @@ export function UserManagement() {
         </div>
       </div>
 
-      {/* User List */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+      {/* User List - Desktop Table / Mobile Cards */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-visible">
+        {/* Desktop View */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-100">
                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">User</th>
                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Role</th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell">Status</th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell">Joined</th>
+                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Joined</th>
                 <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -220,46 +242,26 @@ export function UserManagement() {
                       {u.role}
                     </span>
                   </td>
-                  <td className="py-3 px-4 hidden md:table-cell">
+                  <td className="py-3 px-4">
                     <span className={`inline-flex items-center gap-1 text-xs font-medium ${u.is_active ? 'text-green-600' : 'text-gray-400'}`}>
                       <span className={`w-2 h-2 rounded-full ${u.is_active ? 'bg-green-500' : 'bg-gray-300'}`}></span>
                       {u.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-xs text-gray-500 hidden md:table-cell">
+                  <td className="py-3 px-4 text-xs text-gray-500">
                     {new Date(u.created_at).toLocaleDateString()}
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center justify-end gap-1">
-                      <div className="relative group">
-                        <button className="p-1.5 rounded-md hover:bg-gray-100 transition-colors text-gray-500">
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                        <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20">
-                          <div className="py-1">
-                            <p className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase">Change Role</p>
-                            {(['Admin', 'Manager', 'Agent'] as Role[]).map((r) => (
-                              <button
-                                key={r}
-                                onClick={() => handleRoleChange(u.id, r)}
-                                className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 ${u.role === r ? 'text-blue-600 font-medium' : 'text-gray-700'}`}
-                              >
-                                {getRoleIcon(r)}
-                                {r}
-                                {u.role === r && <Check className="w-3 h-3 ml-auto" />}
-                              </button>
-                            ))}
-                            <div className="border-t border-gray-100 my-1"></div>
-                            <button
-                              onClick={() => handleToggleActive(u)}
-                              className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 ${u.is_active ? 'text-red-600 hover:bg-red-50' : 'text-green-600 hover:bg-green-50'}`}
-                            >
-                              <Ban className="w-4 h-4" />
-                              {u.is_active ? 'Deactivate' : 'Reactivate'}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
+                      <UserActionsMenu 
+                        user={u} 
+                        openMenuId={openMenuId} 
+                        setOpenMenuId={setOpenMenuId} 
+                        menuRef={menuRef}
+                        handleRoleChange={handleRoleChange}
+                        handleToggleActive={handleToggleActive}
+                        setDeleteConfirm={setDeleteConfirm}
+                      />
                     </div>
                   </td>
                 </motion.tr>
@@ -268,6 +270,57 @@ export function UserManagement() {
           </table>
         </div>
 
+        {/* Mobile View */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {filteredUsers.map((u, idx) => (
+            <motion.div
+              key={u.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              className="p-4 flex flex-col gap-3"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-semibold text-base">
+                    {u.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-900">{u.name}</p>
+                    <p className="text-xs text-gray-500">{u.email}</p>
+                  </div>
+                </div>
+                <UserActionsMenu 
+                  user={u} 
+                  openMenuId={openMenuId} 
+                  setOpenMenuId={setOpenMenuId} 
+                  menuRef={menuRef}
+                  handleRoleChange={handleRoleChange}
+                  handleToggleActive={handleToggleActive}
+                  setDeleteConfirm={setDeleteConfirm}
+                />
+              </div>
+              
+              <div className="flex items-center justify-between mt-1">
+                <div className="flex gap-2">
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${getRoleBadgeColor(u.role as Role)}`}>
+                    {getRoleIcon(u.role as Role)}
+                    {u.role}
+                  </span>
+                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider ${u.is_active ? 'text-green-600' : 'text-gray-400'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${u.is_active ? 'bg-green-500' : 'bg-gray-300'}`}></span>
+                    {u.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                <p className="text-[10px] text-gray-400 font-medium">
+                  Joined {new Date(u.created_at).toLocaleDateString()}
+                </p>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
         {filteredUsers.length === 0 && (
           <div className="text-center py-12">
             <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
@@ -275,7 +328,6 @@ export function UserManagement() {
             <p className="text-gray-500 mt-1">Try adjusting your search or filter.</p>
           </div>
         )}
-      </div>
 
       {/* Invite User Dialog */}
       <AnimatePresence>
@@ -379,6 +431,131 @@ export function UserManagement() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Delete Confirmation Dialog */}
+      <AnimatePresence>
+        {deleteConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={() => setDeleteConfirm(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-12 h-12 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">Delete User Permanently?</h3>
+              <p className="text-sm text-gray-500 text-center mb-6">
+                This will remove the user from both the database and the login system. This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setDeleteConfirm(null)}
+                  className="flex-1 py-2.5 px-4 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteUser(deleteConfirm)}
+                  disabled={deleting}
+                  className="flex-1 py-2.5 px-4 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Sub-Components ───────────────────────────────────────
+
+interface UserActionsMenuProps {
+  user: Profile;
+  openMenuId: string | null;
+  setOpenMenuId: (id: string | null) => void;
+  menuRef: React.RefObject<HTMLDivElement | null>;
+  handleRoleChange: (id: string, role: Role) => void;
+  handleToggleActive: (user: Profile) => void;
+  setDeleteConfirm: (id: string) => void;
+}
+
+function UserActionsMenu({ 
+  user, 
+  openMenuId, 
+  setOpenMenuId, 
+  menuRef,
+  handleRoleChange,
+  handleToggleActive,
+  setDeleteConfirm
+}: UserActionsMenuProps) {
+  
+  const getRoleIcon = (role: Role) => {
+    switch (role) {
+      case 'Admin': return <Shield className="w-4 h-4" />;
+      case 'Manager': return <Briefcase className="w-4 h-4" />;
+      case 'Agent': return <HardHat className="w-4 h-4" />;
+    }
+  };
+
+  return (
+    <div className="relative">
+      <button 
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpenMenuId(openMenuId === user.id ? null : user.id);
+        }}
+        className="p-1.5 rounded-md hover:bg-gray-100 transition-colors text-gray-500"
+      >
+        <MoreVertical className="w-4 h-4" />
+      </button>
+      {openMenuId === user.id && (
+        <div 
+          ref={menuRef}
+          className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-xl border border-gray-100 z-[100] py-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Change Role</p>
+          {(['Admin', 'Manager', 'Agent'] as Role[]).map((r) => (
+            <button
+              key={r}
+              onClick={() => { setOpenMenuId(null); handleRoleChange(user.id, r); }}
+              className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 ${user.role === r ? 'text-blue-600 font-bold' : 'text-gray-700'}`}
+            >
+              {getRoleIcon(r)}
+              {r}
+              {user.role === r && <Check className="w-3.5 h-3.5 ml-auto text-blue-600" />}
+            </button>
+          ))}
+          <div className="border-t border-gray-100 my-1"></div>
+          <button
+            onClick={() => { setOpenMenuId(null); handleToggleActive(user); }}
+            className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 ${user.is_active ? 'text-orange-600 hover:bg-orange-50 font-medium' : 'text-green-600 hover:bg-green-50 font-medium'}`}
+          >
+            <Ban className="w-4 h-4" />
+            {user.is_active ? 'Deactivate' : 'Reactivate'}
+          </button>
+          <button
+            onClick={() => { setOpenMenuId(null); setDeleteConfirm(user.id); }}
+            className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 font-medium"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete User
+          </button>
+        </div>
+      )}
     </div>
   );
 }

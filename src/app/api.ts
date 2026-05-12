@@ -5,8 +5,8 @@
 import { supabase } from './supabaseClient';
 import { projectId } from '../../utils/supabase/info';
 
-// const API_BASE = `http://localhost:8000/make-server-9bb778f6/api`;
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/server/api`;
+const API_BASE = `http://localhost:8000/server/api`;
+// const API_BASE = `https://${projectId}.supabase.co/functions/v1/server/api`;
 
 // ─── Helpers ─────────────────────────────────────────────
 
@@ -34,6 +34,17 @@ async function apiRequest<T>(
   const json = await res.json();
 
   if (!res.ok) {
+    // Handle expired or invalid tokens by logging out
+    const isUnauthorized = res.status === 401 || 
+                           json.error?.toLowerCase().includes('expired') || 
+                           json.error?.toLowerCase().includes('invalid token');
+
+    if (isUnauthorized && window.location.pathname !== '/') {
+      console.warn('Session expired or invalid, logging out...');
+      supabase.auth.signOut().then(() => {
+        window.location.href = '/';
+      });
+    }
     throw new Error(json.error || `API error: ${res.status}`);
   }
 
@@ -117,11 +128,11 @@ export async function updateUser(id: string, data: UpdateUserPayload) {
   return result.data;
 }
 
-export async function deactivateUser(id: string) {
-  const result = await apiRequest<{ data: Profile }>(`/users/${id}`, {
+export async function deleteUser(id: string) {
+  const result = await apiRequest<{ success: boolean }>(`/users/${id}`, {
     method: 'DELETE',
   });
-  return result.data;
+  return result;
 }
 
 // ─── Templates ───────────────────────────────────────────
@@ -218,10 +229,11 @@ export async function uploadSitePhoto(file: File, projectId: string): Promise<st
 
 // ─── Password Reset (public, no auth required) ──────────
 
-const PUBLIC_API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-9bb778f6`;
-
 export async function requestPasswordReset(email: string) {
-  const res = await fetch(`${PUBLIC_API_BASE}/auth/reset-password`, {
+  // Use the same base as API_BASE but replace /api with /auth
+  const base = API_BASE.replace(/\/api$/, '/auth');
+  
+  const res = await fetch(`${base}/reset-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),

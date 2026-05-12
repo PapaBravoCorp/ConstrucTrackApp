@@ -60,7 +60,18 @@ users.post("/", requireRole("Admin"), async (c) => {
     return c.json({ error: "Password must be at least 8 characters" }, 400);
   }
 
-  // Create the user via admin API (auto-confirmed)
+  // 1. Manually check if user already exists to provide a better error message
+  const { data: existingUser } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (existingUser) {
+    return c.json({ error: "A user with this email already exists" }, 400);
+  }
+
+  // 2. Create the user via admin API
   const { data, error } = await supabase.auth.admin.createUser({
     email,
     password,

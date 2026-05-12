@@ -5,8 +5,8 @@
 import { supabase } from './supabaseClient';
 import { projectId } from '../../utils/supabase/info';
 
-const API_BASE = `http://localhost:8000/server/api`;
-// const API_BASE = `https://${projectId}.supabase.co/functions/v1/server/api`;
+// const API_BASE = `http://localhost:8000/server/api`;
+const API_BASE = `https://${projectId}.supabase.co/functions/v1/server/api`;
 
 // ─── Helpers ─────────────────────────────────────────────
 

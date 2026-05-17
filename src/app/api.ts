@@ -34,6 +34,13 @@ async function apiRequest<T>(
   const json = await res.json();
 
   if (!res.ok) {
+    if (res.status === 429) {
+      const warning = json.warning || "Too many requests. Please wait a moment.";
+      // Use a custom event to notify the UI to show a toast, or if we have a global toast mechanism, invoke it.
+      // Since sonner is likely used, we can just dispatch a custom event.
+      window.dispatchEvent(new CustomEvent('api:ratelimit', { detail: warning }));
+    }
+
     // Handle expired or invalid tokens by logging out
     const isUnauthorized = res.status === 401 || 
                            json.error?.toLowerCase().includes('expired') || 

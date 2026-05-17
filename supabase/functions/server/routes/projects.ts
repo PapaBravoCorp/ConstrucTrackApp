@@ -51,6 +51,24 @@ projects.get("/", async (c) => {
   return c.json({ data: enriched });
 });
 
+// GET /projects/action-center — manager queue from materialized views
+projects.get("/action-center", requireRole("Admin", "Manager"), async (c) => {
+  const user = c.get("user");
+  const supabase = getServiceClient();
+
+  const { data, error } = await supabase
+    .from("vw_action_center_queues")
+    .select("*")
+    .eq("manager_id", user.id)
+    .order("last_update", { ascending: false });
+
+  if (error) {
+    return c.json({ error: error.message }, 500);
+  }
+
+  return c.json({ data });
+});
+
 // GET /projects/:id — single project with full detail
 projects.get("/:id", async (c) => {
   const id = c.req.param("id");

@@ -4,6 +4,7 @@ import { computeScheduleStatus } from "../lib/scheduleStatus.ts";
 import { assertValidTransition, MilestoneStatus } from "../lib/workflowTransitions.ts";
 import { validateDependencies } from "../lib/dependencyValidator.ts";
 import { emitDomainEvent, DomainEventType } from "../lib/domainEvents.ts";
+import { rateLimiter } from "../middleware/rateLimiter.ts";
 
 const milestones = new Hono();
 
@@ -41,7 +42,7 @@ milestones.get("/:projectId", async (c) => {
 });
 
 // POST /milestones/:milestoneId/update — submit progress update (agent)
-milestones.post("/:milestoneId/update", async (c) => {
+milestones.post("/:milestoneId/update", rateLimiter('uploads'), async (c) => {
   const milestoneId = c.req.param("milestoneId");
   const user = c.get("user");
   const supabase = getServiceClient();
@@ -156,7 +157,7 @@ milestones.post("/:milestoneId/update", async (c) => {
 });
 
 // PUT /milestones/:milestoneId/status — state transition enforcement
-milestones.put("/:milestoneId/status", async (c) => {
+milestones.put("/:milestoneId/status", rateLimiter('transitions'), async (c) => {
   const milestoneId = c.req.param("milestoneId");
   const user = c.get("user");
   const supabase = getServiceClient();

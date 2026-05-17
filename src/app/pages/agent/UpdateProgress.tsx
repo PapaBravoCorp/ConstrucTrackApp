@@ -100,7 +100,7 @@ export function UpdateProgress() {
         setUploadProgress('Uploading photos...');
         for (let i = 0; i < photos.length; i++) {
           setUploadProgress(`Uploading photo ${i + 1} of ${photos.length}...`);
-          const url = await uploadSitePhoto(photos[i], project.id);
+          const url = await uploadSitePhoto(photos[i], project.organization_id, project.id, milestoneId);
           photoUrls.push(url);
         }
       }

@@ -220,9 +220,9 @@ export async function fetchActivityLog(params?: { limit?: number; offset?: numbe
 
 // ─── File Upload ─────────────────────────────────────────
 
-export async function uploadSitePhoto(file: File, projectId: string): Promise<string> {
+export async function uploadSitePhoto(file: File, organizationId: string, projectId: string, milestoneId: string): Promise<string> {
   const fileExt = file.name.split('.').pop();
-  const fileName = `${projectId}/${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+  const fileName = `${organizationId}/${projectId}/${milestoneId}/${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
 
   const { data, error } = await supabase.storage
     .from('site-photos')
@@ -277,6 +277,7 @@ export type ProjectStatus = 'On Track' | 'Delayed' | 'Completed';
 
 export interface Project {
   id: string;
+  organization_id: string;
   name: string;
   address: string;
   type: 'Residential' | 'Commercial';

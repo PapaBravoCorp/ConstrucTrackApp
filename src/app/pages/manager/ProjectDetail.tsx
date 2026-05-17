@@ -161,9 +161,19 @@ export function ManagerProjectDetail() {
                 <div className="flex-1 pr-4">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-semibold text-gray-900">{milestone.name}</h3>
-                    <span className={`font-bold ${milestone.percent_done === 100 ? 'text-green-600' : 'text-blue-600'}`}>
-                      {milestone.percent_done}%
-                    </span>
+                    <div className="flex gap-2 items-center">
+                      {milestone.schedule_status && milestone.schedule_status !== 'ON_TRACK' && (
+                        <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded-full font-bold ${milestone.schedule_status === 'DELAYED' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
+                          {milestone.schedule_status.replace('_', ' ')}
+                        </span>
+                      )}
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 whitespace-nowrap">
+                        {milestone.status || 'Pending'}
+                      </span>
+                      <span className={`font-bold ${milestone.percent_done === 100 ? 'text-green-600' : 'text-blue-600'}`}>
+                        {milestone.percent_done}%
+                      </span>
+                    </div>
                   </div>
                   <div className="w-full bg-gray-100 rounded-full h-1.5">
                     <div 

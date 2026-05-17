@@ -1,5 +1,7 @@
 import { Hono } from "npm:hono";
 import { getServiceClient } from "../middleware/auth.ts";
+import { computeScheduleStatus } from "../lib/scheduleStatus.ts";
+import { assertValidTransition, MilestoneStatus } from "../lib/workflowTransitions.ts";
 
 const milestones = new Hono();
 
@@ -24,9 +26,10 @@ milestones.get("/:projectId", async (c) => {
     return c.json({ error: error.message }, 500);
   }
 
-  // Sort updates by date within each milestone
+  // Sort updates by date within each milestone and append schedule_status
   const enriched = (data || []).map((m: any) => ({
     ...m,
+    schedule_status: computeScheduleStatus(m.status || 'Pending', m.due_date || null),
     updates: (m.updates || []).sort(
       (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     ),
@@ -148,6 +151,59 @@ milestones.post("/:milestoneId/update", async (c) => {
   });
 
   return c.json({ data: update }, 201);
+});
+
+// PUT /milestones/:milestoneId/status — state transition enforcement
+milestones.put("/:milestoneId/status", async (c) => {
+  const milestoneId = c.req.param("milestoneId");
+  const user = c.get("user");
+  const supabase = getServiceClient();
+  const body = await c.req.json();
+  const { status: nextState } = body;
+
+  if (!nextState) {
+    return c.json({ error: "Missing required 'status' field" }, 400);
+  }
+
+  // Fetch current state
+  const { data: milestone, error: mError } = await supabase
+    .from("milestones")
+    .select("status, project_id")
+    .eq("id", milestoneId)
+    .single();
+
+  if (mError || !milestone) {
+    return c.json({ error: "Milestone not found" }, 404);
+  }
+
+  const currentState = milestone.status as MilestoneStatus;
+
+  // Validate transition
+  try {
+    assertValidTransition(currentState, nextState as MilestoneStatus);
+  } catch (err: any) {
+    return c.json({ error: err.message }, 400);
+  }
+
+  // Execute transition
+  const { data: updated, error: uError } = await supabase
+    .from("milestones")
+    .update({ 
+      status: nextState,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", milestoneId)
+    .select()
+    .single();
+
+  if (uError) {
+    return c.json({ error: uError.message }, 500);
+  }
+
+  // TODO: Add Domain Event logging here in Phase 2
+  // TODO: Add Activity Logging here
+
+  return c.json({ data: updated });
 });
 
 export default milestones;

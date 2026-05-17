@@ -100,6 +100,14 @@ export async function submitProgressUpdate(milestoneId: string, data: ProgressUp
   return result.data;
 }
 
+export async function updateMilestoneStatus(milestoneId: string, status: string) {
+  const result = await apiRequest<{ data: any }>(`/milestones/${milestoneId}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  });
+  return result.data;
+}
+
 // ─── Users ───────────────────────────────────────────────
 
 export async function fetchUsers() {
@@ -291,6 +299,10 @@ export interface Milestone {
   weight: number;
   percent_done: number;
   sort_order: number;
+  status?: string;          // Milestone workflow status
+  schedule_status?: string; // Derived operational schedule status
+  start_date?: string;
+  due_date?: string;
   last_update: string | null;
   thumbnail_url: string | null;
   created_at: string;

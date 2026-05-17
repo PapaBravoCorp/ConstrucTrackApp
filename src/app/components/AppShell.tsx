@@ -3,6 +3,7 @@ import { Outlet, Navigate, useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../auth';
 import { User as UserIcon, LogOut, ArrowLeft } from 'lucide-react';
 import { NotificationPanel } from './NotificationPanel';
+import { toast } from 'sonner';
 
 export function AppShell() {
   const { user, loading, logout } = useAuth();
@@ -18,7 +19,17 @@ export function AppShell() {
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+
+    const handleRateLimit = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      toast.warning(customEvent.detail || "Rate limit exceeded. Please wait.");
+    };
+    window.addEventListener('api:ratelimit', handleRateLimit);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('api:ratelimit', handleRateLimit);
+    };
   }, []);
 
   if (loading) {

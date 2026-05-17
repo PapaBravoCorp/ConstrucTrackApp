@@ -80,7 +80,15 @@ export function AgentProjectDetail() {
                 </div>
                 
                 <div className="pl-7">
-                  <div className="flex items-center gap-3 mt-1">
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    {milestone.schedule_status && milestone.schedule_status !== 'ON_TRACK' && (
+                      <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded-full font-bold ${milestone.schedule_status === 'DELAYED' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
+                        {milestone.schedule_status.replace('_', ' ')}
+                      </span>
+                    )}
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                      {milestone.status || 'Pending'}
+                    </span>
                     <span className={`text-xs font-bold ${milestone.percent_done === 100 ? 'text-green-600' : 'text-blue-600'}`}>
                       {milestone.percent_done}% Done
                     </span>

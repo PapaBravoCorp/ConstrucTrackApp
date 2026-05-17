@@ -34,6 +34,13 @@ async function apiRequest<T>(
   const json = await res.json();
 
   if (!res.ok) {
+    if (res.status === 429) {
+      const warning = json.warning || "Too many requests. Please wait a moment.";
+      // Use a custom event to notify the UI to show a toast, or if we have a global toast mechanism, invoke it.
+      // Since sonner is likely used, we can just dispatch a custom event.
+      window.dispatchEvent(new CustomEvent('api:ratelimit', { detail: warning }));
+    }
+
     // Handle expired or invalid tokens by logging out
     const isUnauthorized = res.status === 401 || 
                            json.error?.toLowerCase().includes('expired') || 
@@ -98,6 +105,14 @@ export async function submitProgressUpdate(milestoneId: string, data: ProgressUp
     body: JSON.stringify(data),
   });
   return result.data;
+}
+
+export async function updateMilestoneStatus(milestoneId: string, status: string) {
+  const result = await apiRequest<{ data: any; warning?: string }>(`/milestones/${milestoneId}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  });
+  return result;
 }
 
 // ─── Users ───────────────────────────────────────────────
@@ -205,9 +220,9 @@ export async function fetchActivityLog(params?: { limit?: number; offset?: numbe
 
 // ─── File Upload ─────────────────────────────────────────
 
-export async function uploadSitePhoto(file: File, projectId: string): Promise<string> {
+export async function uploadSitePhoto(file: File, organizationId: string, projectId: string, milestoneId: string): Promise<string> {
   const fileExt = file.name.split('.').pop();
-  const fileName = `${projectId}/${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+  const fileName = `${organizationId}/${projectId}/${milestoneId}/${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
 
   const { data, error } = await supabase.storage
     .from('site-photos')
@@ -262,6 +277,7 @@ export type ProjectStatus = 'On Track' | 'Delayed' | 'Completed';
 
 export interface Project {
   id: string;
+  organization_id: string;
   name: string;
   address: string;
   type: 'Residential' | 'Commercial';
@@ -291,6 +307,10 @@ export interface Milestone {
   weight: number;
   percent_done: number;
   sort_order: number;
+  status?: string;          // Milestone workflow status
+  schedule_status?: string; // Derived operational schedule status
+  start_date?: string;
+  due_date?: string;
   last_update: string | null;
   thumbnail_url: string | null;
   created_at: string;

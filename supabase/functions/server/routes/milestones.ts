@@ -2,6 +2,8 @@ import { Hono } from "npm:hono";
 import { getServiceClient } from "../middleware/auth.ts";
 import { computeScheduleStatus } from "../lib/scheduleStatus.ts";
 import { assertValidTransition, MilestoneStatus } from "../lib/workflowTransitions.ts";
+import { validateDependencies } from "../lib/dependencyValidator.ts";
+import { emitDomainEvent, DomainEventType } from "../lib/domainEvents.ts";
 
 const milestones = new Hono();
 
@@ -165,10 +167,10 @@ milestones.put("/:milestoneId/status", async (c) => {
     return c.json({ error: "Missing required 'status' field" }, 400);
   }
 
-  // Fetch current state
+  // Fetch current state and project details
   const { data: milestone, error: mError } = await supabase
     .from("milestones")
-    .select("status, project_id")
+    .select("status, project_id, name, organization_id")
     .eq("id", milestoneId)
     .single();
 
@@ -177,12 +179,26 @@ milestones.put("/:milestoneId/status", async (c) => {
   }
 
   const currentState = milestone.status as MilestoneStatus;
+  const organizationId = milestone.organization_id;
+  const projectId = milestone.project_id;
 
   // Validate transition
   try {
     assertValidTransition(currentState, nextState as MilestoneStatus);
   } catch (err: any) {
     return c.json({ error: err.message }, 400);
+  }
+
+  // Enforce dependencies if moving to 'In Progress'
+  let responseWarning: string | undefined = undefined;
+  if (nextState === 'In Progress' && organizationId) {
+    const depCheck = await validateDependencies(organizationId, projectId, milestoneId, user.id);
+    if (!depCheck.allowed) {
+      return c.json({ error: depCheck.warning }, 409); // Conflict
+    }
+    if (depCheck.warning) {
+      responseWarning = depCheck.warning;
+    }
   }
 
   // Execute transition
@@ -200,10 +216,36 @@ milestones.put("/:milestoneId/status", async (c) => {
     return c.json({ error: uError.message }, 500);
   }
 
-  // TODO: Add Domain Event logging here in Phase 2
-  // TODO: Add Activity Logging here
+  // Emit Domain Event
+  if (organizationId) {
+    // Determine event type based on nextState
+    let eventType: DomainEventType = 'MilestoneSubmittedForReview';
+    let message = `Milestone status changed from ${currentState} to ${nextState}`;
 
-  return c.json({ data: updated });
+    if (nextState === 'Completed') eventType = 'MilestoneApproved';
+    else if (nextState === 'Rejected') eventType = 'MilestoneRejected';
+    else if (nextState === 'Reopened') eventType = 'MilestoneReopened';
+    else if (nextState === 'Blocked') eventType = 'MilestoneBlocked';
+    else if (nextState === 'Archived') eventType = 'MilestoneArchived';
+    else if (nextState === 'Under Review') eventType = 'MilestoneSubmittedForReview';
+
+    // If it's a simple In Progress or Pending transition, we might not have a specific enum, just use 'STATUS_CHANGE' activity via MilestoneSubmittedForReview for now.
+    // Actually, 'MilestoneSubmittedForReview' translates to 'STATUS_CHANGE' in domainEvents.ts.
+    if (['In Progress', 'Pending', 'Cancelled'].includes(nextState)) {
+       eventType = 'MilestoneSubmittedForReview'; 
+    }
+
+    await emitDomainEvent(eventType, {
+      organizationId,
+      projectId,
+      milestoneId,
+      userId: user.id,
+      message,
+      metadata: { from: currentState, to: nextState }
+    });
+  }
+
+  return c.json({ data: updated, warning: responseWarning });
 });
 
 export default milestones;

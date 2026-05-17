@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { fetchProject, submitProgressUpdate, uploadSitePhoto } from '../../api';
-import type { ProjectDetail } from '../../api';
+import { fetchProject, submitProgressUpdate, uploadSitePhoto, updateMilestoneStatus } from '../../api';
+import type { ProjectDetail, Milestone } from '../../api';
 import { useAuth } from '../../auth';
 import { Camera, MapPin, UploadCloud, CheckCircle2, Loader2, X } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -135,6 +135,24 @@ export function UpdateProgress() {
 
   if (!project || !milestone) return <div className="p-6 text-center">Not found</div>;
 
+  const handleStartWork = async () => {
+    try {
+      setIsSubmitting(true);
+      const res = await updateMilestoneStatus(milestoneId!, 'In Progress');
+      if (res.warning) {
+        toast.warning(res.warning, { duration: 5000 });
+      } else {
+        toast.success("Milestone marked as In Progress");
+      }
+      // Refresh project data to show updated status
+      await loadProject();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to start milestone');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (showSuccess) {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center">
@@ -153,10 +171,22 @@ export function UpdateProgress() {
 
   return (
     <div className="p-4 md:p-6 pb-24 min-h-screen bg-gray-50 max-w-lg mx-auto">
-      <div className="mb-6">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Update Milestone</p>
-        <h1 className="text-xl font-bold text-gray-900 leading-tight">{milestone.name}</h1>
-        <p className="text-sm text-gray-500 mt-1">{project.name}</p>
+      <div className="mb-6 flex justify-between items-start">
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Update Milestone</p>
+          <h1 className="text-xl font-bold text-gray-900 leading-tight">{milestone.name}</h1>
+          <p className="text-sm text-gray-500 mt-1">{project.name}</p>
+        </div>
+        {(!milestone.status || milestone.status === 'Pending') && (
+          <button
+            type="button"
+            onClick={handleStartWork}
+            disabled={isSubmitting}
+            className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-200 transition-colors"
+          >
+            Start Work
+          </button>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">

@@ -101,11 +101,11 @@ export async function submitProgressUpdate(milestoneId: string, data: ProgressUp
 }
 
 export async function updateMilestoneStatus(milestoneId: string, status: string) {
-  const result = await apiRequest<{ data: any }>(`/milestones/${milestoneId}/status`, {
+  const result = await apiRequest<{ data: any; warning?: string }>(`/milestones/${milestoneId}/status`, {
     method: 'PUT',
     body: JSON.stringify({ status }),
   });
-  return result.data;
+  return result;
 }
 
 // ─── Users ───────────────────────────────────────────────

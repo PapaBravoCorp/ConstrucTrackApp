@@ -19,7 +19,8 @@ milestones.get("/:projectId", async (c) => {
       *,
       updates:milestone_updates(
         id, percent_done, note, photo_urls, latitude, longitude, created_at,
-        agent:profiles(id, name)
+        review_status, approval_notes, rejection_reason, rejection_category, submitted_for_review_at,
+        agent:profiles!agent_id(id, name)
       )
     `)
     .eq("project_id", projectId)
@@ -54,106 +55,202 @@ milestones.post("/:milestoneId/update", rateLimiter('uploads'), async (c) => {
     return c.json({ error: "percentDone must be between 0 and 100" }, 400);
   }
 
-  // Get the milestone and its project
-  const { data: milestone, error: mError } = await supabase
-    .from("milestones")
-    .select("*, project:projects(id, name, manager_id)")
-    .eq("id", milestoneId)
-    .single();
-
-  if (mError || !milestone) {
-    return c.json({ error: "Milestone not found" }, 404);
-  }
-
-  // Create the update record
-  const { data: update, error: uError } = await supabase
-    .from("milestone_updates")
-    .insert({
-      milestone_id: milestoneId,
-      agent_id: user.id,
-      percent_done: percentDone,
-      note: note || null,
-      photo_urls: photoUrls || [],
-      latitude: latitude || null,
-      longitude: longitude || null,
-    })
-    .select()
-    .single();
-
-  if (uError) {
-    return c.json({ error: uError.message }, 500);
-  }
-
-  // Update milestone percent_done and last_update
-  const thumbnailUrl = photoUrls && photoUrls.length > 0 ? photoUrls[0] : milestone.thumbnail_url;
-  await supabase
-    .from("milestones")
-    .update({
-      percent_done: percentDone,
-      last_update: new Date().toISOString(),
-      thumbnail_url: thumbnailUrl,
-    })
-    .eq("id", milestoneId);
-
-  // Recalculate project percent_done
-  const { data: allMilestones } = await supabase
-    .from("milestones")
-    .select("percent_done, weight")
-    .eq("project_id", milestone.project.id);
-
-  if (allMilestones) {
-    const projectPercent = Math.round(
-      allMilestones.reduce((acc: number, m: any) => acc + (m.percent_done * (m.weight / 100)), 0)
-    );
-    await supabase
-      .from("projects")
-      .update({ percent_done: projectPercent, updated_at: new Date().toISOString() })
-      .eq("id", milestone.project.id);
-  }
-
-  // Notify the project manager
-  if (milestone.project.manager_id) {
-    await supabase.from("notifications").insert({
-      user_id: milestone.project.manager_id,
-      title: "Milestone Updated",
-      body: `${user.name} updated "${milestone.name}" to ${percentDone}% on "${milestone.project.name}"`,
-      type: "update",
-      reference_id: milestone.project.id,
-    });
-  }
-
-  // Notify admins
-  const { data: admins } = await supabase.from("profiles").select("id").eq("role", "Admin");
-  if (admins && admins.length > 0) {
-    const adminNotifs = admins
-      .filter((a: any) => a.id !== milestone.project.manager_id) // Don't double-notify
-      .map((a: any) => ({
-        user_id: a.id,
-        title: "Milestone Updated",
-        body: `${user.name} updated "${milestone.name}" to ${percentDone}% on "${milestone.project.name}"`,
-        type: "update",
-        reference_id: milestone.project.id,
-      }));
-    if (adminNotifs.length > 0) {
-      await supabase.from("notifications").insert(adminNotifs);
-    }
-  }
-
-  // Activity log
-  await supabase.from("activity_log").insert({
-    user_id: user.id,
-    action: "progress_update",
-    entity_type: "milestone",
-    entity_id: milestoneId,
-    details: {
-      milestoneName: milestone.name,
-      projectName: milestone.project.name,
-      percentDone,
-      note,
-    },
+  // Execute atomic DB transaction via stored procedure
+  const { data: updateId, error: rpcError } = await supabase.rpc('submit_milestone_update', {
+    p_milestone_id: milestoneId,
+    p_agent_id: user.id,
+    p_percent_done: percentDone,
+    p_note: note || null,
+    p_photo_urls: photoUrls || [],
+    p_latitude: latitude || null,
+    p_longitude: longitude || null,
   });
 
-  return c.json({ data: update }, 201);
+  if (rpcError) {
+    const status = rpcError.code === 'P0003' ? 403 : rpcError.code === 'P0002' ? 404 : 500;
+    return c.json({ error: rpcError.message || 'Failed to submit update' }, status);
+  }
+
+  // Decoupled Side Effect: Dispatch notifications asynchronously after success
+  (async () => {
+    try {
+      const { data: mData } = await supabase
+        .from('milestones')
+        .select('name, project:projects(id, name, manager_id)')
+        .eq('id', milestoneId)
+        .single();
+        
+      if (mData?.project?.manager_id) {
+        await supabase.from("notifications").insert({
+          user_id: mData.project.manager_id,
+          title: "Milestone Update Submitted",
+          body: `${user.name} submitted a progress update of ${percentDone}% for "${mData.name}" on "${mData.project.name}". Pending your review.`,
+          type: "update_pending",
+          reference_id: mData.project.id,
+        });
+      }
+    } catch(err) {
+      console.error("Failed to send side-effect notifications", err);
+    }
+  })();
+
+  return c.json({ data: { id: updateId, review_status: 'pending' } }, 201);
+});
+
+// POST /updates/:updateId/approve — approve progress update (manager)
+milestones.post("/updates/:updateId/approve", rateLimiter('transitions'), async (c) => {
+  const updateId = c.req.param("updateId");
+  const user = c.get("user");
+  const supabase = getServiceClient();
+  const body = await c.req.json();
+  const { approvalNotes, expectedVersion } = body;
+
+  if (expectedVersion === undefined) {
+    return c.json({ error: "Missing required 'expectedVersion' field for optimistic locking" }, 400);
+  }
+
+  const { error: rpcError } = await supabase.rpc('approve_milestone_update', {
+    p_update_id: updateId,
+    p_reviewer_id: user.id,
+    p_approval_notes: approvalNotes || null,
+    p_expected_version: expectedVersion
+  });
+
+  if (rpcError) {
+    if (rpcError.code === 'PR003') return c.json({ error: rpcError.message }, 409); // Conflict (version)
+    if (rpcError.code === 'P0003') return c.json({ error: rpcError.message }, 403); // Forbidden
+    if (rpcError.code === 'PR002' || rpcError.code === 'PR001') return c.json({ error: rpcError.message }, 400);
+    if (rpcError.code === 'P0002') return c.json({ error: rpcError.message }, 404);
+    return c.json({ error: rpcError.message }, 500);
+  }
+
+  // Decoupled Side Effect
+  (async () => {
+    try {
+      const { data: update } = await supabase.from('milestone_updates').select('agent_id, percent_done, milestone_id').eq('id', updateId).single();
+      if (update?.agent_id) {
+        const { data: mData } = await supabase.from('milestones').select('name, project:projects(id, name)').eq('id', update.milestone_id).single();
+        if (mData) {
+          await supabase.from("notifications").insert({
+            user_id: update.agent_id,
+            title: "Update Approved",
+            body: `Your update of ${update.percent_done}% for "${mData.name}" was approved by ${user.name}.`,
+            type: "update_approved",
+            reference_id: mData.project.id,
+          });
+        }
+      }
+    } catch(err) {
+      console.error("Side-effect failed", err);
+    }
+  })();
+
+  return c.json({ data: { success: true } });
+});
+
+// POST /updates/:updateId/reject — reject progress update (manager)
+milestones.post("/updates/:updateId/reject", rateLimiter('transitions'), async (c) => {
+  const updateId = c.req.param("updateId");
+  const user = c.get("user");
+  const supabase = getServiceClient();
+  const body = await c.req.json();
+  const { rejectionReason } = body;
+
+  const { error: rpcError } = await supabase.rpc('reject_milestone_update', {
+    p_update_id: updateId,
+    p_reviewer_id: user.id,
+    p_rejection_reason: rejectionReason || null
+  });
+
+  if (rpcError) {
+    if (rpcError.code === 'P0003') return c.json({ error: rpcError.message }, 403); // Forbidden
+    if (rpcError.code === 'PR002' || rpcError.code === 'PR001') return c.json({ error: rpcError.message }, 400);
+    if (rpcError.code === 'P0002') return c.json({ error: rpcError.message }, 404);
+    return c.json({ error: rpcError.message }, 500);
+  }
+
+  // Decoupled Side Effect
+  (async () => {
+    try {
+      const { data: update } = await supabase.from('milestone_updates').select('agent_id, percent_done, milestone_id').eq('id', updateId).single();
+      if (update?.agent_id) {
+        const { data: mData } = await supabase.from('milestones').select('name, project:projects(id, name)').eq('id', update.milestone_id).single();
+        if (mData) {
+          await supabase.from("notifications").insert({
+            user_id: update.agent_id,
+            title: "Update Rejected",
+            body: `Your update of ${update.percent_done}% for "${mData.name}" was rejected by ${user.name}.`,
+            type: "update_rejected",
+            reference_id: mData.project.id,
+          });
+        }
+      }
+    } catch(err) {
+      console.error("Side-effect failed", err);
+    }
+  })();
+
+  return c.json({ data: { success: true } });
+});
+
+// POST /updates/:updateId/changes-requested — request changes on update (manager)
+milestones.post("/updates/:updateId/changes-requested", rateLimiter('transitions'), async (c) => {
+  const updateId = c.req.param("updateId");
+  const user = c.get("user");
+  const supabase = getServiceClient();
+  const body = await c.req.json();
+  const { reason, category } = body;
+
+  if (!reason || reason.trim() === '') {
+    return c.json({ error: "A reason is required when requesting changes" }, 400);
+  }
+
+  const { error: rpcError } = await supabase.rpc('request_changes_milestone_update', {
+    p_update_id: updateId,
+    p_reviewer_id: user.id,
+    p_reason: reason,
+    p_category: category || null,
+  });
+
+  if (rpcError) {
+    if (rpcError.code === 'P0003') return c.json({ error: rpcError.message }, 403);
+    if (rpcError.code === 'P0004') return c.json({ error: rpcError.message }, 400);
+    if (rpcError.code === 'PR002' || rpcError.code === 'PR001') return c.json({ error: rpcError.message }, 400);
+    if (rpcError.code === 'P0002') return c.json({ error: rpcError.message }, 404);
+    return c.json({ error: rpcError.message }, 500);
+  }
+
+  return c.json({ data: { success: true } });
+});
+
+// POST /updates/:updateId/rework-required — require full rework (manager)
+milestones.post("/updates/:updateId/rework-required", rateLimiter('transitions'), async (c) => {
+  const updateId = c.req.param("updateId");
+  const user = c.get("user");
+  const supabase = getServiceClient();
+  const body = await c.req.json();
+  const { reason, category } = body;
+
+  if (!reason || reason.trim() === '') {
+    return c.json({ error: "A reason is required when requesting rework" }, 400);
+  }
+
+  const { error: rpcError } = await supabase.rpc('request_rework_milestone_update', {
+    p_update_id: updateId,
+    p_reviewer_id: user.id,
+    p_reason: reason,
+    p_category: category || null,
+  });
+
+  if (rpcError) {
+    if (rpcError.code === 'P0003') return c.json({ error: rpcError.message }, 403);
+    if (rpcError.code === 'P0004') return c.json({ error: rpcError.message }, 400);
+    if (rpcError.code === 'PR002' || rpcError.code === 'PR001') return c.json({ error: rpcError.message }, 400);
+    if (rpcError.code === 'P0002') return c.json({ error: rpcError.message }, 404);
+    return c.json({ error: rpcError.message }, 500);
+  }
+
+  return c.json({ data: { success: true } });
 });
 
 // PUT /milestones/:milestoneId/status — state transition enforcement

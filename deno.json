@@ -1,6 +1,6 @@
 {
   "tasks": {
-    "dev": "deno run --watch --allow-net --allow-env supabase/functions/server/index.tsx"
+    "dev": "deno run --watch --allow-net --allow-env --env supabase/functions/server/index.ts"
   },
   "nodeModulesDir": "auto"
 }

@@ -81,8 +81,8 @@ projects.get("/:id", async (c) => {
       manager:profiles!projects_manager_id_fkey(id, name, email, role),
       agents:project_agents(agent_id, profile:profiles(id, name, email, role)),
       milestones(
-        id, name, weight, percent_done, sort_order, last_update, thumbnail_url,
-        updates:milestone_updates(id, percent_done, note, photo_urls, latitude, longitude, created_at, agent:profiles(id, name))
+        id, name, weight, percent_done, sort_order, last_update, thumbnail_url, version_number, status, due_date, start_date,
+        updates:milestone_updates(id, percent_done, note, photo_urls, latitude, longitude, created_at, review_status, approval_notes, rejection_reason, rejection_category, submitted_for_review_at, agent:profiles!agent_id(id, name))
       )
     `)
     .eq("id", id)

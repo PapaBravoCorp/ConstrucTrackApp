@@ -194,6 +194,7 @@ projects.post("/", requireRole("Admin"), async (c) => {
       project_id: project.id,
       name: m.name,
       weight: m.weight,
+      due_date: m.dueDate || null,
       sort_order: index,
       percent_done: 0,
     }));

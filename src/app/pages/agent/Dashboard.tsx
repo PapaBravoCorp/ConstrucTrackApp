@@ -458,6 +458,11 @@ export function AgentDashboard() {
                         <MapPin className="w-3 h-3 mt-0.5 shrink-0 text-gray-400" />
                         <span className="line-clamp-1">{project.address}</span>
                       </div>
+                      {project.end_date && (
+                        <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                          <CalendarClock className="w-3 h-3 text-gray-400" /> Ends {new Date(project.end_date).toLocaleDateString()}
+                        </div>
+                      )}
                     </div>
                     <span className={`text-xs font-bold ${project.percent_done === 100 ? 'text-green-600' : 'text-blue-600'}`}>
                       {project.percent_done}%

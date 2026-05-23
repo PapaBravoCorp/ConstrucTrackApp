@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router';
 import { fetchProject } from '../../api';
 import type { ProjectDetail, MilestoneWithUpdates } from '../../api';
-import { Camera, ChevronRight, CheckCircle2, History, Loader2, AlertCircle, Clock, Eye, XCircle, RefreshCw } from 'lucide-react';
+import { Camera, ChevronRight, CheckCircle2, History, Loader2, AlertCircle, Clock, Eye, XCircle, RefreshCw, Calendar } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export function AgentProjectDetail() {
@@ -42,7 +42,15 @@ export function AgentProjectDetail() {
     <div className="p-4 md:p-6 pb-24 min-h-screen bg-gray-50 max-w-2xl mx-auto">
       <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm mb-6">
         <h1 className="text-xl font-bold text-gray-900 leading-tight mb-2">{project.name}</h1>
-        <p className="text-sm text-gray-500 mb-4">{project.address}</p>
+        <div className="text-sm text-gray-500 mb-4 flex items-center gap-2 flex-wrap">
+          <span>{project.address}</span>
+          {project.end_date && (
+            <>
+              <span>•</span>
+              <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Ends {new Date(project.end_date).toLocaleDateString()}</span>
+            </>
+          )}
+        </div>
         
         <div className="flex items-center gap-4">
           <div className="flex-1">
@@ -128,6 +136,12 @@ export function AgentProjectDetail() {
                     <span className={`text-xs font-bold ${milestone.percent_done === 100 ? 'text-green-600' : 'text-blue-600'}`}>
                       {milestone.percent_done}% Done
                     </span>
+                    {milestone.due_date && (
+                      <span className="text-xs text-gray-500 flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        Due {new Date(milestone.due_date).toLocaleDateString()}
+                      </span>
+                    )}
                     {milestone.last_update && (
                       <span className="text-xs text-gray-500 flex items-center gap-1">
                         <History className="w-3 h-3" />

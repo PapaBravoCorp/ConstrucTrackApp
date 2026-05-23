@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 interface MilestoneItem {
   name: string;
   weight: number;
+  dueDate?: string;
 }
 
 export function CreateProject() {
@@ -58,19 +59,19 @@ export function CreateProject() {
     setSelectedTemplateId(templateId);
     const template = templates.find(t => t.id === templateId);
     if (template) {
-      setMilestones(template.phases.map(p => ({ name: p.name, weight: p.weight })));
+      setMilestones(template.phases.map(p => ({ name: p.name, weight: p.weight, dueDate: '' })));
     }
   };
 
   const addMilestone = () => {
-    setMilestones([...milestones, { name: '', weight: 0 }]);
+    setMilestones([...milestones, { name: '', weight: 0, dueDate: '' }]);
   };
 
   const removeMilestone = (index: number) => {
     setMilestones(milestones.filter((_, i) => i !== index));
   };
 
-  const updateMilestone = (index: number, field: 'name' | 'weight', value: string | number) => {
+  const updateMilestone = (index: number, field: 'name' | 'weight' | 'dueDate', value: string | number) => {
     setMilestones(milestones.map((m, i) => i === index ? { ...m, [field]: value } : m));
   };
 
@@ -239,27 +240,39 @@ export function CreateProject() {
                 </div>
                 
                 {milestones.map((m, i) => (
-                  <div key={i} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-100">
-                    <GripVertical className="w-4 h-4 text-gray-300 shrink-0" />
-                    <input
-                      type="text"
-                      value={m.name}
-                      onChange={(e) => updateMilestone(i, 'name', e.target.value)}
-                      placeholder="Milestone name"
-                      className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
-                    />
-                    <input
-                      type="number"
-                      value={m.weight}
-                      onChange={(e) => updateMilestone(i, 'weight', parseInt(e.target.value) || 0)}
-                      className="w-16 px-2 py-1.5 text-sm text-center border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
-                      min="0" max="100"
-                    />
-                    <span className="text-xs text-gray-400">%</span>
-                    <button type="button" onClick={() => removeMilestone(i)}
-                      className="p-1 text-gray-400 hover:text-red-500 transition-colors">
-                      <X className="w-4 h-4" />
-                    </button>
+                  <div key={i} className="flex flex-col lg:flex-row lg:items-center gap-2 bg-white p-3 rounded-lg border border-gray-100">
+                    <div className="flex items-center gap-2 w-full lg:flex-1">
+                      <GripVertical className="w-4 h-4 text-gray-300 shrink-0 hidden lg:block" />
+                      <input
+                        type="text"
+                        value={m.name}
+                        onChange={(e) => updateMilestone(i, 'name', e.target.value)}
+                        placeholder="Milestone name"
+                        className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 justify-between lg:justify-start w-full lg:w-auto">
+                      <input
+                        type="date"
+                        value={m.dueDate || ''}
+                        onChange={(e) => updateMilestone(i, 'dueDate', e.target.value)}
+                        className="flex-1 lg:w-36 px-2 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
+                      />
+                      <div className="flex items-center gap-1 shrink-0">
+                        <input
+                          type="number"
+                          value={m.weight}
+                          onChange={(e) => updateMilestone(i, 'weight', parseInt(e.target.value) || 0)}
+                          className="w-16 px-2 py-1.5 text-sm text-center border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
+                          min="0" max="100"
+                        />
+                        <span className="text-xs text-gray-400">%</span>
+                      </div>
+                      <button type="button" onClick={() => removeMilestone(i)}
+                        className="p-1 text-gray-400 hover:text-red-500 transition-colors shrink-0">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 ))}
 

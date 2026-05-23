@@ -439,7 +439,7 @@ export interface CreateProjectPayload {
   client: string;
   managerId?: string;
   agentIds?: string[];
-  milestones?: { name: string; weight: number }[];
+  milestones?: { name: string; weight: number; dueDate?: string }[];
   templateId?: string;
 }
 

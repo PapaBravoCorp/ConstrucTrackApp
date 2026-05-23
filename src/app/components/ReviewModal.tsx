@@ -186,7 +186,7 @@ export function ReviewModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting || (reviewType !== 'approve' && text.trim().length < 10)}
+            disabled={isSubmitting}
             className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2
               ${isSubmitting ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
           >

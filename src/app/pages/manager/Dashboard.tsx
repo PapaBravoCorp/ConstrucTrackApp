@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router';
 import {
   Search, Clock, AlertTriangle, CheckCircle, BarChart3,
-  ChevronRight, Loader2, RotateCcw, Inbox, Filter as FilterIcon
+  ChevronRight, Loader2, RotateCcw, Inbox, Filter as FilterIcon, Calendar
 } from 'lucide-react';
 import { useProjects } from '../../projectsContext';
 import { fetchManagerDashboard, approveMilestoneUpdate, requestChanges, requestRework } from '../../api';
@@ -112,15 +112,15 @@ export function ManagerDashboard() {
 
   // Compute operational counters from DTO
   const counters = useMemo(() => {
-    let pendingReviews = 0, rework = 0, delayed = 0, atRisk = 0;
+    let pendingReviews = reviewQueue.length;
+    let rework = 0, delayed = 0, atRisk = 0;
 
     for (const pd of projectDetails) {
-      pendingReviews += pd.pendingApprovals || 0;
       delayed += pd.overdueMilestones || 0;
     }
 
     return { pendingReviews, rework, delayed, atRisk };
-  }, [projectDetails]);
+  }, [projectDetails, reviewQueue.length]);
 
   // Project urgency scoring
   const sortedProjects = useMemo(() => {
@@ -219,34 +219,49 @@ export function ManagerDashboard() {
       )}
       {/* Section A: Action Required Banner */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-        <button onClick={() => setActiveTab('reviewQueue')} className={`bg-white p-3.5 rounded-xl border shadow-sm text-left transition-all ${counters.pendingReviews > 0 ? 'border-yellow-300 hover:border-yellow-400' : 'border-gray-200'}`}>
+        <button 
+          onClick={() => setActiveTab('reviewQueue')} 
+          className={`bg-white p-3.5 rounded-xl border shadow-sm text-left transition-all ${counters.pendingReviews > 0 ? 'border-yellow-300 hover:border-yellow-400 cursor-pointer' : 'border-gray-200 hover:bg-gray-50'}`}
+        >
           <div className="flex items-center gap-2 mb-1">
             <Inbox className="w-4 h-4 text-yellow-500" />
             <p className="text-xs font-medium text-gray-500">Pending Reviews</p>
           </div>
           <p className={`text-2xl font-bold ${counters.pendingReviews > 0 ? 'text-yellow-600' : 'text-gray-400'}`}>{counters.pendingReviews}</p>
         </button>
-        <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm text-left">
+
+        <button 
+          onClick={() => { if (counters.rework > 0) setActiveTab('projects') }}
+          className={`bg-white p-3.5 rounded-xl border shadow-sm text-left transition-all ${counters.rework > 0 ? 'border-orange-300 hover:border-orange-400 cursor-pointer' : 'border-gray-200 cursor-default'}`}
+        >
           <div className="flex items-center gap-2 mb-1">
             <RotateCcw className="w-4 h-4 text-orange-500" />
             <p className="text-xs font-medium text-gray-500">Rework</p>
           </div>
           <p className={`text-2xl font-bold ${counters.rework > 0 ? 'text-orange-600' : 'text-gray-400'}`}>{counters.rework}</p>
-        </div>
-        <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm text-left">
+        </button>
+
+        <button 
+          onClick={() => { if (counters.delayed > 0) setActiveTab('projects') }}
+          className={`bg-white p-3.5 rounded-xl border shadow-sm text-left transition-all ${counters.delayed > 0 ? 'border-red-300 hover:border-red-400 cursor-pointer' : 'border-gray-200 cursor-default'}`}
+        >
           <div className="flex items-center gap-2 mb-1">
             <AlertTriangle className="w-4 h-4 text-red-500" />
             <p className="text-xs font-medium text-gray-500">Delayed</p>
           </div>
           <p className={`text-2xl font-bold ${counters.delayed > 0 ? 'text-red-600' : 'text-gray-400'}`}>{counters.delayed}</p>
-        </div>
-        <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm text-left">
+        </button>
+
+        <button 
+          onClick={() => { if (counters.atRisk > 0) setActiveTab('projects') }}
+          className={`bg-white p-3.5 rounded-xl border shadow-sm text-left transition-all ${counters.atRisk > 0 ? 'border-blue-300 hover:border-blue-400 cursor-pointer' : 'border-gray-200 cursor-default'}`}
+        >
           <div className="flex items-center gap-2 mb-1">
             <Clock className="w-4 h-4 text-blue-500" />
             <p className="text-xs font-medium text-gray-500">At Risk</p>
           </div>
           <p className={`text-2xl font-bold ${counters.atRisk > 0 ? 'text-blue-600' : 'text-gray-400'}`}>{counters.atRisk}</p>
-        </div>
+        </button>
       </div>
 
       {/* Tab Toggle */}
@@ -302,6 +317,9 @@ export function ManagerDashboard() {
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex-1 pr-3">
                         <h3 className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{project.title}</h3>
+                        <div className={`text-xs mt-0.5 flex items-center gap-1 ${deadline.color}`}>
+                          <Calendar className="w-3 h-3" /> {deadline.text}
+                        </div>
                       </div>
                       <span className={`text-[10px] font-bold px-2 py-1 rounded-full shrink-0 ${cta.color}`}>
                         {cta.label}

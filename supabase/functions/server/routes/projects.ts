@@ -15,7 +15,7 @@ projects.get("/", async (c) => {
       *,
       manager:profiles!projects_manager_id_fkey(id, name, email, role),
       agents:project_agents(agent_id, profile:profiles(id, name, email, role)),
-      milestones(id, name, weight, percent_done, sort_order, last_update, thumbnail_url)
+      milestones(id, name, weight, percent_done, sort_order, last_update, thumbnail_url, due_date)
     `)
     .order("created_at", { ascending: false });
 

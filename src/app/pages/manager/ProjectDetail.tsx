@@ -2,21 +2,44 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router';
 import { fetchProject, approveMilestoneUpdate, requestChanges, requestRework } from '../../api';
 import type { ProjectDetail, MilestoneWithUpdates } from '../../api';
-import { Clock, Image as ImageIcon, History, ChevronDown, ChevronUp, MapPin, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { supabase } from '../../supabaseClient';
+import { ReviewModal } from '../../components/ReviewModal';
+import { Clock, Image as ImageIcon, History, ChevronDown, ChevronUp, MapPin, CheckCircle, AlertTriangle, Loader2, List } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    if (data.isSynthetic) {
+      return (
+        <div className="bg-white border border-gray-200 p-2 rounded shadow-sm text-xs z-50">
+          <p className="font-semibold text-gray-500 mb-1">Initial Baseline (Synthetic)</p>
+          <p className="text-gray-900 font-bold">{data.actual}%</p>
+        </div>
+      );
+    }
+    return (
+      <div className="bg-white border border-gray-200 p-2 rounded shadow-sm text-xs z-50">
+        <p className="font-semibold text-gray-700 mb-1">{label}</p>
+        <p className="text-blue-600 font-bold">Actual progress: {data.actual}%</p>
+      </div>
+    );
+  }
+  return null;
+};
 
 export function ManagerProjectDetail() {
   const { id } = useParams();
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'milestones' | 'gallery'>('milestones');
+  const [activeTab, setActiveTab] = useState<'milestones' | 'gallery' | 'audit'>('milestones');
   const [expandedMilestone, setExpandedMilestone] = useState<string | null>(null);
-  const [reviewModal, setReviewModal] = useState<{ updateId: string; type: 'changes_requested' | 'rework_required' } | null>(null);
-  const [reviewReason, setReviewReason] = useState('');
-  const [reviewCategory, setReviewCategory] = useState('');
-  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewModal, setReviewModal] = useState<{ updateId: string; type: 'changes_requested' | 'rework_required'; projectId: string; title: string } | null>(null);
+
+  const [progressData, setProgressData] = useState<{name: string, actual: number}[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
   useEffect(() => {
     if (id) loadProject();
@@ -24,8 +47,34 @@ export function ManagerProjectDetail() {
 
   const loadProject = async () => {
     try {
-      const data = await fetchProject(id!);
+      const [data, { data: chartData }, { data: logs }] = await Promise.all([
+        fetchProject(id!),
+        supabase.rpc('rpc_project_progress_monthly_utc', { p_project_id: id }),
+        supabase.from('milestone_activity').select('*').eq('project_id', id).order('created_at', { ascending: false })
+      ]);
       setProject(data);
+      
+      if (chartData && chartData.length > 0) {
+        const mappedData = chartData.map((d: any) => ({
+          name: new Date(d.month_end).toLocaleDateString('en', { month: 'short', year: '2-digit' }),
+          actual: d.percent_done,
+          isSynthetic: false
+        }));
+        
+        // If there's only one data point (e.g., project started this month),
+        // add a synthetic starting point at 0 to draw a dashed inferred line.
+        if (mappedData.length === 1) {
+          setProgressData([{ name: 'Project Created', actual: 0, isSynthetic: true }, mappedData[0]]);
+        } else {
+          setProgressData(mappedData);
+        }
+      } else {
+        setProgressData([]);
+      }
+      
+      if (logs) {
+        setAuditLogs(logs);
+      }
     } catch (err) {
       console.error('Failed to load project:', err);
     } finally {
@@ -46,25 +95,20 @@ export function ManagerProjectDetail() {
     }
   };
 
-  const handleReviewAction = async () => {
-    if (!reviewModal || !reviewReason.trim()) return;
-    setReviewSubmitting(true);
+  const handleReviewAction = async (text: string, category?: string) => {
+    if (!reviewModal) return;
     try {
       if (reviewModal.type === 'changes_requested') {
-        await requestChanges(reviewModal.updateId, reviewReason, reviewCategory || undefined);
+        await requestChanges(reviewModal.updateId, text, category);
         toast.success('Changes requested successfully');
       } else {
-        await requestRework(reviewModal.updateId, reviewReason, reviewCategory || undefined);
+        await requestRework(reviewModal.updateId, text, category);
         toast.success('Rework required sent');
       }
       setReviewModal(null);
-      setReviewReason('');
-      setReviewCategory('');
       loadProject();
     } catch (err: any) {
       toast.error(err.message || 'Failed to submit review');
-    } finally {
-      setReviewSubmitting(false);
     }
   };
 
@@ -74,32 +118,7 @@ export function ManagerProjectDetail() {
 
   if (!project) return <div className="p-6 text-center">Project not found</div>;
 
-  // Build progress chart from real milestone update data
-  const buildProgressData = () => {
-    const allUpdates = project.milestones.flatMap(m => 
-      (m.updates || []).map(u => ({
-        date: new Date(u.created_at),
-        month: new Date(u.created_at).toLocaleDateString('en', { month: 'short', year: '2-digit' }),
-      }))
-    );
-    
-    // Group by month and show project percent at each point
-    const monthMap = new Map<string, number>();
-    const months = [...new Set(allUpdates.map(u => u.month))];
-    
-    if (months.length === 0) {
-      return [{ name: 'Start', actual: 0 }, { name: 'Current', actual: project.percent_done }];
-    }
 
-    // Simple: show cumulative progress
-    return [
-      { name: 'Start', actual: 0 },
-      ...months.map((m, i) => ({ name: m, actual: Math.round((project.percent_done / months.length) * (i + 1)) })),
-      { name: 'Current', actual: project.percent_done },
-    ];
-  };
-
-  const progressData = buildProgressData();
 
   const allPhotos = project.milestones.flatMap(m => 
     (m.updates || []).flatMap(u => 
@@ -150,21 +169,36 @@ export function ManagerProjectDetail() {
 
         <div className="h-48 mt-6">
           <h3 className="text-sm font-semibold text-gray-700 mb-2">Progress Trend</h3>
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={progressData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#2563eb" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} domain={[0, 100]} />
-              <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-              <Area type="monotone" dataKey="actual" stroke="#2563eb" strokeWidth={2} fillOpacity={1} fill="url(#colorActual)" name="Progress %" />
-            </AreaChart>
-          </ResponsiveContainer>
+          {progressData.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-gray-400 text-sm italic bg-gray-50 rounded-lg border border-dashed border-gray-200">
+              No progress updates recorded
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={progressData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} domain={[0, 100]} />
+                <Tooltip content={<CustomTooltip />} />
+                <Area 
+                  type="monotone" 
+                  dataKey="actual" 
+                  stroke="#2563eb" 
+                  strokeWidth={2} 
+                  strokeDasharray={progressData.length === 2 && (progressData[0] as any).isSynthetic ? "5 5" : undefined}
+                  fillOpacity={progressData.length === 2 && (progressData[0] as any).isSynthetic ? 0 : 1}
+                  fill="url(#colorActual)" 
+                  name="Progress %" 
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
@@ -181,6 +215,13 @@ export function ManagerProjectDetail() {
           className={`flex-1 pb-3 text-center text-sm font-medium transition-colors ${activeTab === 'gallery' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
         >
           Photo Gallery ({allPhotos.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('audit')}
+          className={`flex-1 pb-3 text-center text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${activeTab === 'audit' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <List className="w-4 h-4" />
+          Audit Log
         </button>
       </div>
 
@@ -280,8 +321,8 @@ export function ManagerProjectDetail() {
                                )}
                                <div className="mt-4 flex flex-wrap gap-2">
                                    <button onClick={() => handleApprove(pendingUpdate.id, milestone.version_number)} className="bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm hover:bg-blue-700 active:scale-95 transition-all">Approve</button>
-                                   <button onClick={() => { setReviewModal({ updateId: pendingUpdate.id, type: 'changes_requested' }); setReviewReason(''); setReviewCategory(''); }} className="bg-orange-50 border border-orange-300 text-orange-700 text-xs font-bold px-4 py-2 rounded-lg shadow-sm hover:bg-orange-100 active:scale-95 transition-all">Changes Requested</button>
-                                   <button onClick={() => { setReviewModal({ updateId: pendingUpdate.id, type: 'rework_required' }); setReviewReason(''); setReviewCategory(''); }} className="bg-red-50 border border-red-300 text-red-700 text-xs font-bold px-4 py-2 rounded-lg shadow-sm hover:bg-red-100 active:scale-95 transition-all">Rework Required</button>
+                                   <button onClick={() => { setReviewModal({ updateId: pendingUpdate.id, type: 'changes_requested', projectId: project.id, title: `Changes Requested: ${milestone.name}` }); }} className="bg-orange-50 border border-orange-300 text-orange-700 text-xs font-bold px-4 py-2 rounded-lg shadow-sm hover:bg-orange-100 active:scale-95 transition-all">Changes Requested</button>
+                                   <button onClick={() => { setReviewModal({ updateId: pendingUpdate.id, type: 'rework_required', projectId: project.id, title: `Rework Required: ${milestone.name}` }); }} className="bg-red-50 border border-red-300 text-red-700 text-xs font-bold px-4 py-2 rounded-lg shadow-sm hover:bg-red-100 active:scale-95 transition-all">Rework Required</button>
                                 </div>
                             </div>
                           </div>
@@ -319,10 +360,10 @@ export function ManagerProjectDetail() {
                                   </div>
                                 )}
                                 {update.latitude && update.longitude && (
-                                  <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
+                                  <a href={`https://www.google.com/maps/search/?api=1&query=${update.latitude},${update.longitude}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline mt-2 flex items-center gap-1 w-fit bg-blue-50 px-2 py-1 rounded">
                                     <MapPin className="w-3 h-3" />
-                                    {update.latitude.toFixed(4)}, {update.longitude.toFixed(4)}
-                                  </p>
+                                    View Location
+                                  </a>
                                 )}
                               </div>
                             </div>
@@ -338,7 +379,7 @@ export function ManagerProjectDetail() {
             </motion.div>
           )})}
         </div>
-      ) : (
+      ) : activeTab === 'gallery' ? (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {allPhotos.length > 0 ? (
             allPhotos.map((photo, idx) => (
@@ -363,72 +404,52 @@ export function ManagerProjectDetail() {
             </div>
           )}
         </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden p-0">
+          {auditLogs.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[600px]">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-500 whitespace-nowrap">Time (UTC)</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-500">Action</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-500">Details</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {auditLogs.map((log) => (
+                    <tr key={log.id} className="text-sm hover:bg-gray-50">
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{new Date(log.created_at).toISOString().replace('T', ' ').substring(0, 19)}</td>
+                      <td className="px-4 py-3 text-gray-600">
+                        <span className="px-2 py-1 bg-gray-100 rounded text-xs font-medium uppercase">{log.action_type}</span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-500 font-mono text-[10px] max-w-xs truncate" title={JSON.stringify(log.details)}>
+                        {JSON.stringify(log.details)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-10 text-center text-gray-500">
+              <History className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+              <p>No activity logs found.</p>
+            </div>
+          )}
+        </div>
       )}
     </div>
 
-    {/* Review Action Modal */}
-    {reviewModal && (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setReviewModal(null)}>
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
-          <div className={`px-5 py-4 ${reviewModal.type === 'rework_required' ? 'bg-red-50 border-b border-red-100' : 'bg-orange-50 border-b border-orange-100'}`}>
-            <h3 className="text-lg font-bold text-gray-900">
-              {reviewModal.type === 'rework_required' ? '🔁 Rework Required' : '✏️ Changes Requested'}
-            </h3>
-            <p className="text-sm text-gray-600 mt-1">
-              {reviewModal.type === 'rework_required'
-                ? 'The agent will need to redo and resubmit this work.'
-                : 'The agent should address your feedback and resubmit.'}
-            </p>
-          </div>
-          <div className="p-5 space-y-4">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Reason <span className="text-red-500">*</span></label>
-              <textarea
-                rows={3}
-                value={reviewReason}
-                onChange={(e) => setReviewReason(e.target.value)}
-                placeholder="Explain what needs to be changed or redone..."
-                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm resize-none"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Category <span className="text-gray-400">(optional)</span></label>
-              <select
-                value={reviewCategory}
-                onChange={(e) => setReviewCategory(e.target.value)}
-                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm"
-              >
-                <option value="">Select a category...</option>
-                <option value="work_incomplete">Work Incomplete</option>
-                <option value="incorrect_photo">Incorrect Photo</option>
-                <option value="quantity_mismatch">Quantity Mismatch</option>
-                <option value="safety_concern">Safety Concern</option>
-                <option value="clarification_needed">Clarification Needed</option>
-                <option value="scope_deviation">Scope Deviation</option>
-              </select>
-            </div>
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setReviewModal(null)}
-                className="flex-1 bg-gray-100 text-gray-700 p-3 rounded-xl font-semibold hover:bg-gray-200 active:scale-[0.98] transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleReviewAction}
-                disabled={!reviewReason.trim() || reviewSubmitting}
-                className={`flex-1 text-white p-3 rounded-xl font-semibold shadow-lg active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                  reviewModal.type === 'rework_required' ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-600 hover:bg-orange-700'
-                }`}
-              >
-                {reviewSubmitting ? 'Submitting...' : reviewModal.type === 'rework_required' ? 'Require Rework' : 'Request Changes'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
+    <ReviewModal
+      isOpen={reviewModal !== null}
+      onClose={() => setReviewModal(null)}
+      onSubmit={handleReviewAction}
+      projectId={reviewModal?.projectId || ''}
+      updateId={reviewModal?.updateId || ''}
+      reviewType={reviewModal?.type || 'changes_requested'}
+      title={reviewModal?.title || ''}
+    />
   </>
   );
 }

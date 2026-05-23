@@ -1,5 +1,6 @@
 import { Hono } from "npm:hono";
 import { getServiceClient, requireRole } from "../middleware/auth.ts";
+import { ManagerDashboardService } from "../services/managerDashboardService.ts";
 
 const projects = new Hono();
 
@@ -49,6 +50,23 @@ projects.get("/", async (c) => {
   }));
 
   return c.json({ data: enriched });
+});
+
+// GET /manager/dashboard — optimized aggregated dashboard for managers
+projects.get("/manager/dashboard", requireRole("Manager", "Admin"), async (c) => {
+  const user = c.get("user");
+  const supabase = getServiceClient();
+  const service = new ManagerDashboardService(supabase);
+  
+  const limit = Number(c.req.query("limit")) || 20;
+  const cursor = c.req.query("cursor");
+  
+  try {
+    const dashboard = await service.getDashboard(user.id, limit, cursor);
+    return c.json({ data: dashboard });
+  } catch (error: any) {
+    return c.json({ error: error.message || "Failed to fetch manager dashboard" }, 500);
+  }
 });
 
 // GET /projects/action-center — manager queue from materialized views

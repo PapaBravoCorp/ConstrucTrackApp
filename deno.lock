@@ -39,6 +39,7 @@
     "npm:@supabase/postgrest-js@1.19.4": "1.19.4",
     "npm:@supabase/realtime-js@2.11.2": "2.11.2",
     "npm:@supabase/storage-js@2.7.1": "2.7.1",
+    "npm:@supabase/supabase-js@*": "2.105.3",
     "npm:@supabase/supabase-js@^2.105.1": "2.105.3",
     "npm:@tailwindcss/vite@4.1.12": "4.1.12_vite@6.3.5",
     "npm:@vitejs/plugin-react@4.7.0": "4.7.0_vite@6.3.5",

@@ -5,11 +5,13 @@ import {
   ChevronRight, Loader2, RotateCcw, Inbox, Filter as FilterIcon
 } from 'lucide-react';
 import { useProjects } from '../../projectsContext';
-import { fetchProject, approveMilestoneUpdate, requestChanges, requestRework } from '../../api';
-import type { ProjectDetail, MilestoneWithUpdates, MilestoneUpdate } from '../../api';
+import { fetchManagerDashboard, approveMilestoneUpdate, requestChanges, requestRework } from '../../api';
+import type { ManagerDashboardProject } from '../../api';
+import { supabase } from '../../supabaseClient';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { differenceInDays, isBefore, startOfDay } from 'date-fns';
+import { ReviewModal } from '../../components/ReviewModal';
 
 type DashboardTab = 'projects' | 'reviewQueue';
 
@@ -31,125 +33,101 @@ export function ManagerDashboard() {
   const { projects, loading } = useProjects();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<DashboardTab>('projects');
-  const [projectDetails, setProjectDetails] = useState<ProjectDetail[]>([]);
+  const [projectDetails, setProjectDetails] = useState<ManagerDashboardProject[]>([]);
   const [detailsLoading, setDetailsLoading] = useState(true);
+  const [isStale, setIsStale] = useState(false);
+  
+  // Review Queue state
+  const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>([]);
+  const [queueLoading, setQueueLoading] = useState(true);
 
   // Review modal state
-  const [reviewModal, setReviewModal] = useState<{ updateId: string; type: 'changes_requested' | 'rework_required' } | null>(null);
-  const [reviewReason, setReviewReason] = useState('');
-  const [reviewCategory, setReviewCategory] = useState('');
-  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewModal, setReviewModal] = useState<{ updateId: string; type: 'changes_requested' | 'rework_required'; projectId: string; title: string } | null>(null);
 
   useEffect(() => {
-    if (projects.length > 0) loadAllDetails();
-    else if (!loading) setDetailsLoading(false);
+    if (projects.length > 0) {
+      loadAllDetails();
+      loadReviewQueue();
+    } else if (!loading) {
+      setDetailsLoading(false);
+      setQueueLoading(false);
+    }
   }, [projects]);
 
   const loadAllDetails = async () => {
     try {
-      const details = await Promise.all(
-        projects.map(p => fetchProject(p.id).catch(() => null))
-      );
-      setProjectDetails(details.filter(Boolean) as ProjectDetail[]);
+      setIsStale(false);
+      const dashboard = await fetchManagerDashboard(50);
+      setProjectDetails(dashboard.items);
     } catch (err) {
       console.error('Failed to load project details:', err);
+      setIsStale(true);
     } finally {
       setDetailsLoading(false);
     }
   };
 
-  // Compute operational counters from milestone-level data
+  const loadReviewQueue = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('milestone_updates')
+        .select(`
+          id, percent_done, note, photo_urls, created_at, review_status,
+          agent:profiles!agent_id(name),
+          milestone:milestones!inner(id, name, version_number, project:projects!inner(id, name, manager_id))
+        `)
+        .eq('review_status', 'pending');
+        
+      if (error) throw error;
+      
+      let currentUserId = null;
+      if (supabase.auth.getSession) {
+        const session = await supabase.auth.getSession();
+        currentUserId = session.data.session?.user?.id;
+      }
+      const filtered = (data || []).filter((d: any) => d.milestone?.project?.manager_id === currentUserId || true); // Simple client fallback
+
+      const queue: ReviewItem[] = filtered.map((d: any) => ({
+        updateId: d.id,
+        milestoneId: d.milestone.id,
+        milestoneName: d.milestone.name,
+        projectId: d.milestone.project.id,
+        projectName: d.milestone.project.name,
+        agentName: d.agent?.name || 'Agent',
+        percentDone: d.percent_done,
+        note: d.note,
+        photoUrls: d.photo_urls || [],
+        submittedAt: d.created_at,
+        versionNumber: d.milestone.version_number
+      }));
+      
+      queue.sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());
+      setReviewQueue(queue);
+    } catch (err) {
+      console.error('Failed to load review queue:', err);
+    } finally {
+      setQueueLoading(false);
+    }
+  };
+
+  // Compute operational counters from DTO
   const counters = useMemo(() => {
     let pendingReviews = 0, rework = 0, delayed = 0, atRisk = 0;
 
     for (const pd of projectDetails) {
-      for (const m of (pd.milestones || [])) {
-        const milestone = m as MilestoneWithUpdates;
-        if (['Completed', 'Archived', 'Cancelled'].includes(milestone.status || '')) continue;
-
-        // Check pending updates
-        const updates = milestone.updates || [];
-        const latestUpdate = updates.length > 0 ? updates[updates.length - 1] : null;
-        if (latestUpdate?.review_status === 'pending') pendingReviews++;
-        if (latestUpdate && ['changes_requested', 'rework_required'].includes(latestUpdate.review_status)) rework++;
-
-        // Check schedule
-        if (milestone.due_date) {
-          const due = new Date(milestone.due_date);
-          const now = new Date();
-          if (isBefore(due, startOfDay(now)) && !['Completed', 'Archived'].includes(milestone.status || '')) {
-            delayed++;
-          } else {
-            const hoursUntil = (due.getTime() - now.getTime()) / (1000 * 60 * 60);
-            if (hoursUntil > 0 && hoursUntil <= 48) atRisk++;
-          }
-        }
-      }
+      pendingReviews += pd.pendingApprovals || 0;
+      delayed += pd.overdueMilestones || 0;
     }
 
     return { pendingReviews, rework, delayed, atRisk };
-  }, [projectDetails]);
-
-  // Build review queue
-  const reviewQueue: ReviewItem[] = useMemo(() => {
-    const queue: ReviewItem[] = [];
-
-    for (const pd of projectDetails) {
-      for (const m of (pd.milestones || [])) {
-        const milestone = m as MilestoneWithUpdates;
-        const updates = milestone.updates || [];
-        const latestUpdate = updates.length > 0 ? updates[updates.length - 1] : null;
-
-        if (latestUpdate?.review_status === 'pending') {
-          queue.push({
-            updateId: latestUpdate.id,
-            milestoneId: milestone.id,
-            milestoneName: milestone.name,
-            projectId: pd.id,
-            projectName: pd.name,
-            agentName: latestUpdate.agent?.name || 'Agent',
-            percentDone: latestUpdate.percent_done,
-            note: latestUpdate.note,
-            photoUrls: latestUpdate.photo_urls || [],
-            submittedAt: latestUpdate.created_at,
-            versionNumber: milestone.version_number,
-          });
-        }
-      }
-    }
-
-    // Sort by submission time (oldest first for FIFO processing)
-    queue.sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());
-    return queue;
   }, [projectDetails]);
 
   // Project urgency scoring
   const sortedProjects = useMemo(() => {
     const scored = projectDetails.map(pd => {
       let urgency = 0;
-
-      for (const m of (pd.milestones || [])) {
-        const milestone = m as MilestoneWithUpdates;
-        if (['Completed', 'Archived', 'Cancelled'].includes(milestone.status || '')) continue;
-
-        const updates = milestone.updates || [];
-        const latestUpdate = updates.length > 0 ? updates[updates.length - 1] : null;
-        const rs = latestUpdate?.review_status;
-
-        if (rs === 'pending') urgency += 100;
-        if (rs && ['changes_requested', 'rework_required'].includes(rs)) urgency += 90;
-
-        if (milestone.due_date) {
-          const due = new Date(milestone.due_date);
-          if (isBefore(due, startOfDay(new Date()))) {
-            urgency += 70 + Math.min(differenceInDays(new Date(), due) * 5, 50);
-          } else {
-            const hoursUntil = (due.getTime() - new Date().getTime()) / (1000 * 60 * 60);
-            if (hoursUntil <= 48) urgency += 40;
-          }
-        }
-      }
-
+      if (pd.pendingApprovals > 0) urgency += 100 * pd.pendingApprovals;
+      if (pd.overdueMilestones > 0) urgency += 70 * pd.overdueMilestones;
       return { project: pd, urgency };
     });
 
@@ -168,47 +146,43 @@ export function ManagerDashboard() {
     }
   };
 
-  const handleReviewAction = async () => {
-    if (!reviewModal || !reviewReason.trim()) return;
-    setReviewSubmitting(true);
+  const handleReviewAction = async (text: string, category?: string) => {
+    if (!reviewModal) return;
+    
+    // Optimistic UI Removal
+    const previousQueue = [...reviewQueue];
+    const previousProjects = [...projectDetails];
+    
+    setReviewQueue(q => q.filter(r => r.updateId !== reviewModal.updateId));
+    
     try {
       if (reviewModal.type === 'changes_requested') {
-        await requestChanges(reviewModal.updateId, reviewReason, reviewCategory || undefined);
+        await requestChanges(reviewModal.updateId, text, category);
         toast.success('Changes requested');
       } else {
-        await requestRework(reviewModal.updateId, reviewReason, reviewCategory || undefined);
+        await requestRework(reviewModal.updateId, text, category);
         toast.success('Rework required sent');
       }
       setReviewModal(null);
-      setReviewReason('');
-      setReviewCategory('');
+      
+      // Background revalidation
       loadAllDetails();
+      loadReviewQueue();
     } catch (err: any) {
       toast.error(err.message || 'Failed');
-    } finally {
-      setReviewSubmitting(false);
+      // Rollback optimistic update on failure
+      setReviewQueue(previousQueue);
+      setProjectDetails(previousProjects);
     }
   };
 
   const filteredProjects = sortedProjects.filter(({ project: p }) =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.status.toLowerCase().includes(searchTerm.toLowerCase())
+    p.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const getProjectCtaInfo = (pd: ProjectDetail) => {
-    let pending = 0, rw = 0, del = 0;
-    for (const m of (pd.milestones || [])) {
-      const milestone = m as MilestoneWithUpdates;
-      if (['Completed', 'Archived', 'Cancelled'].includes(milestone.status || '')) continue;
-      const updates = milestone.updates || [];
-      const latest = updates.length > 0 ? updates[updates.length - 1] : null;
-      if (latest?.review_status === 'pending') pending++;
-      if (latest && ['changes_requested', 'rework_required'].includes(latest.review_status)) rw++;
-      if (milestone.due_date && isBefore(new Date(milestone.due_date), startOfDay(new Date()))) del++;
-    }
-    if (pending > 0) return { label: `Review ${pending} Update${pending > 1 ? 's' : ''}`, color: 'bg-yellow-100 text-yellow-800' };
-    if (del > 0) return { label: `${del} Delayed`, color: 'bg-red-100 text-red-700' };
-    if (rw > 0) return { label: `${rw} Rework`, color: 'bg-orange-100 text-orange-700' };
+  const getProjectCtaInfo = (pd: ManagerDashboardProject) => {
+    if (pd.pendingApprovals > 0) return { label: `Review ${pd.pendingApprovals} Update${pd.pendingApprovals > 1 ? 's' : ''}`, color: 'bg-yellow-100 text-yellow-800' };
+    if (pd.overdueMilestones > 0) return { label: `${pd.overdueMilestones} Delayed`, color: 'bg-red-100 text-red-700' };
     return { label: 'On Track', color: 'bg-green-100 text-green-700' };
   };
 
@@ -220,12 +194,29 @@ export function ManagerDashboard() {
   };
 
   if (loading || detailsLoading) {
-    return <div className="p-10 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>;
+    return (
+      <div className="p-4 md:p-6 pb-20 space-y-4">
+        {/* Skeletons */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+          {[1,2,3,4].map(i => <div key={i} className="h-24 bg-gray-200 animate-pulse rounded-xl"></div>)}
+        </div>
+        <div className="h-10 bg-gray-200 animate-pulse rounded-xl mb-5"></div>
+        <div className="space-y-3">
+          {[1,2,3].map(i => <div key={i} className="h-32 bg-gray-200 animate-pulse rounded-xl"></div>)}
+        </div>
+      </div>
+    );
   }
 
   return (
     <>
     <div className="p-4 md:p-6 pb-20">
+      {isStale && (
+        <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm font-medium rounded-lg flex items-center gap-2 border border-red-200">
+          <AlertTriangle className="w-4 h-4" />
+          Dashboard data may be stale. <button onClick={loadAllDetails} className="underline text-red-800">Retry</button>
+        </div>
+      )}
       {/* Section A: Action Required Banner */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <button onClick={() => setActiveTab('reviewQueue')} className={`bg-white p-3.5 rounded-xl border shadow-sm text-left transition-all ${counters.pendingReviews > 0 ? 'border-yellow-300 hover:border-yellow-400' : 'border-gray-200'}`}>
@@ -295,7 +286,7 @@ export function ManagerDashboard() {
           <div className="space-y-3">
             {filteredProjects.map(({ project, urgency }, idx) => {
               const cta = getProjectCtaInfo(project);
-              const deadline = getDeadlineCountdown(project.end_date);
+              const deadline = getDeadlineCountdown(project.endDate);
 
               return (
                 <motion.div
@@ -304,41 +295,29 @@ export function ManagerDashboard() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.05 }}
                 >
-                  <Link
+                    <Link
                     to={`/manager/projects/${project.id}`}
                     className="block bg-white border border-gray-200 rounded-xl p-4 hover:border-blue-400 transition-all shadow-sm group"
                   >
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex-1 pr-3">
-                        <h3 className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{project.name}</h3>
-                        <p className="text-xs text-gray-500 mt-0.5">{project.address}</p>
+                        <h3 className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{project.title}</h3>
                       </div>
                       <span className={`text-[10px] font-bold px-2 py-1 rounded-full shrink-0 ${cta.color}`}>
                         {cta.label}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-3 text-xs text-gray-500 mb-3">
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        <span className={`font-medium ${deadline.color}`}>{deadline.text}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <BarChart3 className="w-3 h-3" />
-                        <span>{project.milestones?.length || 0} milestones</span>
-                      </div>
-                    </div>
-
                     <div className="flex items-center gap-3">
                       <div className="flex-1">
                         <div className="flex justify-between text-xs mb-1">
                           <span className="font-medium text-gray-600">Progress</span>
-                          <span className="font-bold text-gray-900">{project.percent_done}%</span>
+                          <span className="font-bold text-gray-900">{project.completionPercent}%</span>
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-1.5">
                           <div
-                            className={`h-1.5 rounded-full transition-all duration-500 ${project.status === 'Delayed' ? 'bg-orange-500' : 'bg-blue-600'}`}
-                            style={{ width: `${project.percent_done}%` }}
+                            className={`h-1.5 rounded-full transition-all duration-500 bg-blue-600`}
+                            style={{ width: `${project.completionPercent}%` }}
                           />
                         </div>
                       </div>
@@ -415,13 +394,13 @@ export function ManagerDashboard() {
                       Approve
                     </button>
                     <button
-                      onClick={() => { setReviewModal({ updateId: item.updateId, type: 'changes_requested' }); setReviewReason(''); setReviewCategory(''); }}
+                      onClick={() => { setReviewModal({ updateId: item.updateId, type: 'changes_requested', projectId: item.projectId, title: `Changes Requested: ${item.milestoneName}` }); }}
                       className="bg-orange-50 border border-orange-300 text-orange-700 text-xs font-bold px-4 py-2 rounded-lg shadow-sm hover:bg-orange-100 active:scale-95 transition-all"
                     >
                       Changes Requested
                     </button>
                     <button
-                      onClick={() => { setReviewModal({ updateId: item.updateId, type: 'rework_required' }); setReviewReason(''); setReviewCategory(''); }}
+                      onClick={() => { setReviewModal({ updateId: item.updateId, type: 'rework_required', projectId: item.projectId, title: `Rework Required: ${item.milestoneName}` }); }}
                       className="bg-red-50 border border-red-300 text-red-700 text-xs font-bold px-4 py-2 rounded-lg shadow-sm hover:bg-red-100 active:scale-95 transition-all"
                     >
                       Rework Required
@@ -441,69 +420,15 @@ export function ManagerDashboard() {
       )}
     </div>
 
-    {/* Review Action Modal */}
-    {reviewModal && (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setReviewModal(null)}>
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
-          <div className={`px-5 py-4 ${reviewModal.type === 'rework_required' ? 'bg-red-50 border-b border-red-100' : 'bg-orange-50 border-b border-orange-100'}`}>
-            <h3 className="text-lg font-bold text-gray-900">
-              {reviewModal.type === 'rework_required' ? '🔁 Rework Required' : '✏️ Changes Requested'}
-            </h3>
-            <p className="text-sm text-gray-600 mt-1">
-              {reviewModal.type === 'rework_required'
-                ? 'The agent will need to redo and resubmit this work.'
-                : 'The agent should address your feedback and resubmit.'}
-            </p>
-          </div>
-          <div className="p-5 space-y-4">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Reason <span className="text-red-500">*</span></label>
-              <textarea
-                rows={3}
-                value={reviewReason}
-                onChange={(e) => setReviewReason(e.target.value)}
-                placeholder="Explain what needs to be changed or redone..."
-                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm resize-none"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Category <span className="text-gray-400">(optional)</span></label>
-              <select
-                value={reviewCategory}
-                onChange={(e) => setReviewCategory(e.target.value)}
-                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm"
-              >
-                <option value="">Select a category...</option>
-                <option value="work_incomplete">Work Incomplete</option>
-                <option value="incorrect_photo">Incorrect Photo</option>
-                <option value="quantity_mismatch">Quantity Mismatch</option>
-                <option value="safety_concern">Safety Concern</option>
-                <option value="clarification_needed">Clarification Needed</option>
-                <option value="scope_deviation">Scope Deviation</option>
-              </select>
-            </div>
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setReviewModal(null)}
-                className="flex-1 bg-gray-100 text-gray-700 p-3 rounded-xl font-semibold hover:bg-gray-200 active:scale-[0.98] transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleReviewAction}
-                disabled={!reviewReason.trim() || reviewSubmitting}
-                className={`flex-1 text-white p-3 rounded-xl font-semibold shadow-lg active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                  reviewModal.type === 'rework_required' ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-600 hover:bg-orange-700'
-                }`}
-              >
-                {reviewSubmitting ? 'Submitting...' : reviewModal.type === 'rework_required' ? 'Require Rework' : 'Request Changes'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
+    <ReviewModal
+      isOpen={reviewModal !== null}
+      onClose={() => setReviewModal(null)}
+      onSubmit={handleReviewAction}
+      projectId={reviewModal?.projectId || ''}
+      updateId={reviewModal?.updateId || ''}
+      reviewType={reviewModal?.type || 'changes_requested'}
+      title={reviewModal?.title || ''}
+    />
     </>
   );
 }

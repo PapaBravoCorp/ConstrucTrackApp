@@ -5,8 +5,8 @@
 import { supabase } from './supabaseClient';
 import { projectId } from '../../utils/supabase/info';
 
-// const API_BASE = `http://localhost:8000/server/api`;
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/server/api`;
+const API_BASE = `http://localhost:8000/server/api`;
+// const API_BASE = `https://${projectId}.supabase.co/functions/v1/server/api`;
 
 // ─── Helpers ─────────────────────────────────────────────
 
@@ -62,6 +62,14 @@ async function apiRequest<T>(
 
 export async function fetchProjects() {
   const result = await apiRequest<{ data: Project[] }>('/projects');
+  return result.data;
+}
+
+export async function fetchManagerDashboard(limit?: number, cursor?: string) {
+  const params = new URLSearchParams();
+  if (limit) params.set('limit', limit.toString());
+  if (cursor) params.set('cursor', cursor);
+  const result = await apiRequest<{ data: DashboardResponse }>(`/projects/manager/dashboard?${params.toString()}`);
   return result.data;
 }
 
@@ -303,6 +311,22 @@ export interface Profile {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface ManagerDashboardProject {
+  id: string;
+  title: string;
+  completionPercent: number;
+  overdueMilestones: number;
+  pendingApprovals: number;
+  latestActivityAt: string | null;
+  endDate: string;
+}
+
+export interface DashboardResponse {
+  items: ManagerDashboardProject[];
+  nextCursor?: string;
+  totalCount: number;
 }
 
 export type ProjectStatus = 'On Track' | 'Delayed' | 'Completed';

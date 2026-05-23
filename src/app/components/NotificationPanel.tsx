@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Bell, Check, CheckCheck, X, Building, Users, AlertTriangle, Settings } from 'lucide-react';
 import { fetchNotifications, markNotificationRead, markAllNotificationsRead } from '../api';
 import type { Notification } from '../api';
+import { useAuth } from '../auth';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -12,6 +13,7 @@ export function NotificationPanel() {
   const [loading, setLoading] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   // Load notifications on mount and periodically
   useEffect(() => {
@@ -47,9 +49,10 @@ export function NotificationPanel() {
       setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n));
       setUnreadCount(prev => Math.max(0, prev - 1));
     }
-    if (notif.reference_id) {
-      // Navigate based on notification type — projects for now
+    if (notif.reference_id && user) {
+      const rolePrefix = user.role === 'Admin' ? '/admin' : user.role === 'Manager' ? '/manager' : '/agent';
       setOpen(false);
+      navigate(`${rolePrefix}/projects/${notif.reference_id}`);
     }
   };
 
@@ -109,7 +112,7 @@ export function NotificationPanel() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 md:w-96 max-w-sm sm:max-w-none bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden transform origin-top-right"
+            className="absolute right-0 top-full mt-2 w-[300px] sm:w-80 md:w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden transform origin-top-right"
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">

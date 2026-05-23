@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { fetchProject, submitProgressUpdate, uploadSitePhoto } from '../../api';
-import type { ProjectDetail } from '../../api';
+import { fetchProject, submitProgressUpdate, uploadSitePhoto, updateMilestoneStatus } from '../../api';
+import type { ProjectDetail, Milestone } from '../../api';
 import { useAuth } from '../../auth';
-import { Camera, MapPin, UploadCloud, CheckCircle2, Loader2, X } from 'lucide-react';
+import { Camera, MapPin, UploadCloud, CheckCircle2, Loader2, X, AlertCircle, Shield } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
 
@@ -20,6 +20,7 @@ export function UpdateProgress() {
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
   const [gpsStatus, setGpsStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [latitude, setLatitude] = useState<number | null>(null);
@@ -36,7 +37,22 @@ export function UpdateProgress() {
       setProject(data);
       const milestone = data.milestones?.find(m => m.id === milestoneId);
       if (milestone) {
-        setPercentDone(milestone.percent_done);
+        // Priority Queue Prefill logic
+        const pendingUpdate = milestone.updates?.find(u => u.review_status === 'pending');
+        const rejectedUpdate = milestone.updates?.slice().reverse().find(u => u.review_status === 'rejected');
+        
+        if (pendingUpdate) {
+          setPercentDone(pendingUpdate.percent_done);
+          if (pendingUpdate.note) setRemark(pendingUpdate.note);
+        } else if (rejectedUpdate) {
+          setPercentDone(rejectedUpdate.percent_done);
+          if (rejectedUpdate.note) setRemark(rejectedUpdate.note);
+          setTimeout(() => {
+            toast.error(`Previous update rejected: ${rejectedUpdate.rejection_reason || 'No reason provided'}`, { duration: 6000 });
+          }, 500);
+        } else {
+          setPercentDone(milestone.percent_done);
+        }
       }
     } catch (err) {
       console.error('Failed to load project:', err);
@@ -87,9 +103,15 @@ export function UpdateProgress() {
     setPhotoPreviews(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleConfirmSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!milestoneId || !project) return;
+    setShowConfirm(true);
+  };
+
+  const handleSubmit = async () => {
+    if (!milestoneId || !project) return;
+    setShowConfirm(false);
     
     setIsSubmitting(true);
     
@@ -100,7 +122,7 @@ export function UpdateProgress() {
         setUploadProgress('Uploading photos...');
         for (let i = 0; i < photos.length; i++) {
           setUploadProgress(`Uploading photo ${i + 1} of ${photos.length}...`);
-          const url = await uploadSitePhoto(photos[i], project.id);
+          const url = await uploadSitePhoto(photos[i], project.organization_id, project.id, milestoneId);
           photoUrls.push(url);
         }
       }
@@ -132,8 +154,27 @@ export function UpdateProgress() {
   }
 
   const milestone = project?.milestones?.find(m => m.id === milestoneId);
+  const rejectedUpdate = milestone?.updates?.slice().reverse().find(u => u.review_status === 'rejected');
 
   if (!project || !milestone) return <div className="p-6 text-center">Not found</div>;
+
+  const handleStartWork = async () => {
+    try {
+      setIsSubmitting(true);
+      const res = await updateMilestoneStatus(milestoneId!, 'In Progress');
+      if (res.warning) {
+        toast.warning(res.warning, { duration: 5000 });
+      } else {
+        toast.success("Milestone marked as In Progress");
+      }
+      // Refresh project data to show updated status
+      await loadProject();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to start milestone');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   if (showSuccess) {
     return (
@@ -153,13 +194,44 @@ export function UpdateProgress() {
 
   return (
     <div className="p-4 md:p-6 pb-24 min-h-screen bg-gray-50 max-w-lg mx-auto">
-      <div className="mb-6">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Update Milestone</p>
-        <h1 className="text-xl font-bold text-gray-900 leading-tight">{milestone.name}</h1>
-        <p className="text-sm text-gray-500 mt-1">{project.name}</p>
+      <div className="mb-6 flex justify-between items-start">
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Update Milestone</p>
+          <h1 className="text-xl font-bold text-gray-900 leading-tight">{milestone.name}</h1>
+          <p className="text-sm text-gray-500 mt-1">{project.name}</p>
+          {milestone.updates?.some(u => u.review_status === 'pending') && (
+            <div className="mt-3 inline-block bg-yellow-50 text-yellow-800 text-xs px-2 py-1.5 rounded-lg border border-yellow-200 font-medium shadow-sm">
+              You have a pending update in review. Submitting again will safely supersede it.
+            </div>
+          )}
+        </div>
+        {(!milestone.status || milestone.status === 'Pending') && (
+          <button
+            type="button"
+            onClick={handleStartWork}
+            disabled={isSubmitting}
+            className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-200 transition-colors"
+          >
+            Start Work
+          </button>
+        )}
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Rejection reason banner */}
+      {rejectedUpdate && rejectedUpdate.rejection_reason && !milestone.updates?.some(u => u.review_status === 'pending') && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-2 shadow-sm">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-bold text-red-800 mb-1">Previous Update Rejected</p>
+              <p className="text-sm text-red-700 leading-relaxed">"{rejectedUpdate.rejection_reason}"</p>
+              <p className="text-xs text-red-500 mt-2">Please address the feedback and resubmit your update.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={handleConfirmSubmit} className="space-y-6">
         {/* Progress Slider */}
         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
           <div className="flex justify-between items-end mb-4">
@@ -258,6 +330,76 @@ export function UpdateProgress() {
           )}
         </button>
       </form>
+
+      {/* Confirmation overlay */}
+      {showConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center" onClick={() => setShowConfirm(false)}>
+          <motion.div
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            className="bg-white w-full max-w-lg rounded-t-3xl p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-5" />
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                <Shield className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Confirm Submission</h3>
+                <p className="text-sm text-gray-500">This will be sent for manager review</p>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-xl p-4 mb-5 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Milestone</span>
+                <span className="font-semibold text-gray-900">{milestone?.name}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Progress</span>
+                <span className="font-bold text-blue-600">{percentDone}%</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Photos</span>
+                <span className="font-semibold text-gray-900">{photos.length} attached</span>
+              </div>
+              {remark && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Note</span>
+                  <span className="font-semibold text-gray-900 text-right max-w-[60%] truncate">{remark}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">GPS</span>
+                <span className={`font-semibold ${latitude ? 'text-green-600' : 'text-gray-400'}`}>
+                  {latitude ? `${latitude.toFixed(4)}, ${longitude?.toFixed(4)}` : 'Not captured'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowConfirm(false)}
+                className="flex-1 bg-gray-100 text-gray-700 p-3.5 rounded-xl font-semibold hover:bg-gray-200 active:scale-[0.98] transition-all"
+              >
+                Go Back
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmit}
+                className="flex-1 bg-blue-600 text-white p-3.5 rounded-xl font-semibold shadow-lg hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                <UploadCloud className="w-5 h-5" />
+                Submit
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

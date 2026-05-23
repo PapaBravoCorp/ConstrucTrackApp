@@ -1,5 +1,6 @@
 import { Hono } from "npm:hono";
 import { getServiceClient, requireRole } from "../middleware/auth.ts";
+import { ManagerDashboardService } from "../services/managerDashboardService.ts";
 
 const projects = new Hono();
 
@@ -14,7 +15,7 @@ projects.get("/", async (c) => {
       *,
       manager:profiles!projects_manager_id_fkey(id, name, email, role),
       agents:project_agents(agent_id, profile:profiles(id, name, email, role)),
-      milestones(id, name, weight, percent_done, sort_order, last_update, thumbnail_url)
+      milestones(id, name, weight, percent_done, sort_order, last_update, thumbnail_url, due_date)
     `)
     .order("created_at", { ascending: false });
 
@@ -51,6 +52,41 @@ projects.get("/", async (c) => {
   return c.json({ data: enriched });
 });
 
+// GET /manager/dashboard — optimized aggregated dashboard for managers
+projects.get("/manager/dashboard", requireRole("Manager", "Admin"), async (c) => {
+  const user = c.get("user");
+  const supabase = getServiceClient();
+  const service = new ManagerDashboardService(supabase);
+  
+  const limit = Number(c.req.query("limit")) || 20;
+  const cursor = c.req.query("cursor");
+  
+  try {
+    const dashboard = await service.getDashboard(user.id, limit, cursor);
+    return c.json({ data: dashboard });
+  } catch (error: any) {
+    return c.json({ error: error.message || "Failed to fetch manager dashboard" }, 500);
+  }
+});
+
+// GET /projects/action-center — manager queue from materialized views
+projects.get("/action-center", requireRole("Admin", "Manager"), async (c) => {
+  const user = c.get("user");
+  const supabase = getServiceClient();
+
+  const { data, error } = await supabase
+    .from("vw_action_center_queues")
+    .select("*")
+    .eq("manager_id", user.id)
+    .order("last_update", { ascending: false });
+
+  if (error) {
+    return c.json({ error: error.message }, 500);
+  }
+
+  return c.json({ data });
+});
+
 // GET /projects/:id — single project with full detail
 projects.get("/:id", async (c) => {
   const id = c.req.param("id");
@@ -63,8 +99,8 @@ projects.get("/:id", async (c) => {
       manager:profiles!projects_manager_id_fkey(id, name, email, role),
       agents:project_agents(agent_id, profile:profiles(id, name, email, role)),
       milestones(
-        id, name, weight, percent_done, sort_order, last_update, thumbnail_url,
-        updates:milestone_updates(id, percent_done, note, photo_urls, latitude, longitude, created_at, agent:profiles(id, name))
+        id, name, weight, percent_done, sort_order, last_update, thumbnail_url, version_number, status, due_date, start_date,
+        updates:milestone_updates(id, percent_done, note, photo_urls, latitude, longitude, created_at, review_status, approval_notes, rejection_reason, rejection_category, submitted_for_review_at, agent:profiles!agent_id(id, name))
       )
     `)
     .eq("id", id)
@@ -158,6 +194,7 @@ projects.post("/", requireRole("Admin"), async (c) => {
       project_id: project.id,
       name: m.name,
       weight: m.weight,
+      due_date: m.dueDate || null,
       sort_order: index,
       percent_done: 0,
     }));

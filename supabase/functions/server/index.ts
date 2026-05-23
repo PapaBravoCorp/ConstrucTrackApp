@@ -10,6 +10,7 @@ import templateRoutes from "./routes/templates.ts";
 import milestoneRoutes from "./routes/milestones.ts";
 import notificationRoutes from "./routes/notifications.ts";
 import activityRoutes from "./routes/activity.ts";
+import cronRoutes from "./routes/cron.ts";
 
 import { kv } from "./kv_store.tsx";
 
@@ -100,6 +101,7 @@ api.route("/templates", templateRoutes);
 api.route("/milestones", milestoneRoutes);
 api.route("/notifications", notificationRoutes);
 api.route("/activity", activityRoutes);
+api.route("/cron", cronRoutes);
 
 // =========================================================
 // MOUNT SUB-APPS TO MAIN APP

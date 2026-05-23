@@ -5,8 +5,8 @@
 import { supabase } from './supabaseClient';
 import { projectId } from '../../utils/supabase/info';
 
-// const API_BASE = `http://localhost:8000/server/api`;
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/server/api`;
+const API_BASE = `http://localhost:8000/server/api`;
+// const API_BASE = `https://${projectId}.supabase.co/functions/v1/server/api`;
 
 // ─── Helpers ─────────────────────────────────────────────
 
@@ -34,10 +34,17 @@ async function apiRequest<T>(
   const json = await res.json();
 
   if (!res.ok) {
+    if (res.status === 429) {
+      const warning = json.warning || "Too many requests. Please wait a moment.";
+      // Use a custom event to notify the UI to show a toast, or if we have a global toast mechanism, invoke it.
+      // Since sonner is likely used, we can just dispatch a custom event.
+      window.dispatchEvent(new CustomEvent('api:ratelimit', { detail: warning }));
+    }
+
     // Handle expired or invalid tokens by logging out
-    const isUnauthorized = res.status === 401 || 
-                           json.error?.toLowerCase().includes('expired') || 
-                           json.error?.toLowerCase().includes('invalid token');
+    const isUnauthorized = res.status === 401 ||
+      json.error?.toLowerCase().includes('expired') ||
+      json.error?.toLowerCase().includes('invalid token');
 
     if (isUnauthorized && window.location.pathname !== '/') {
       console.warn('Session expired or invalid, logging out...');
@@ -55,6 +62,14 @@ async function apiRequest<T>(
 
 export async function fetchProjects() {
   const result = await apiRequest<{ data: Project[] }>('/projects');
+  return result.data;
+}
+
+export async function fetchManagerDashboard(limit?: number, cursor?: string) {
+  const params = new URLSearchParams();
+  if (limit) params.set('limit', limit.toString());
+  if (cursor) params.set('cursor', cursor);
+  const result = await apiRequest<{ data: DashboardResponse }>(`/projects/manager/dashboard?${params.toString()}`);
   return result.data;
 }
 
@@ -96,6 +111,46 @@ export async function submitProgressUpdate(milestoneId: string, data: ProgressUp
   const result = await apiRequest<{ data: any }>(`/milestones/${milestoneId}/update`, {
     method: 'POST',
     body: JSON.stringify(data),
+  });
+  return result.data;
+}
+
+export async function updateMilestoneStatus(milestoneId: string, status: string) {
+  const result = await apiRequest<{ data: any; warning?: string }>(`/milestones/${milestoneId}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  });
+  return result;
+}
+
+export async function approveMilestoneUpdate(updateId: string, approvalNotes: string, expectedVersion: number) {
+  const result = await apiRequest<{ data: any }>(`/milestones/updates/${updateId}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ approvalNotes, expectedVersion }),
+  });
+  return result.data;
+}
+
+export async function rejectMilestoneUpdate(updateId: string, rejectionReason: string) {
+  const result = await apiRequest<{ data: any }>(`/milestones/updates/${updateId}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ rejectionReason }),
+  });
+  return result.data;
+}
+
+export async function requestChanges(updateId: string, reason: string, category?: string) {
+  const result = await apiRequest<{ data: any }>(`/milestones/updates/${updateId}/changes-requested`, {
+    method: 'POST',
+    body: JSON.stringify({ reason, category: category || null }),
+  });
+  return result.data;
+}
+
+export async function requestRework(updateId: string, reason: string, category?: string) {
+  const result = await apiRequest<{ data: any }>(`/milestones/updates/${updateId}/rework-required`, {
+    method: 'POST',
+    body: JSON.stringify({ reason, category: category || null }),
   });
   return result.data;
 }
@@ -205,9 +260,9 @@ export async function fetchActivityLog(params?: { limit?: number; offset?: numbe
 
 // ─── File Upload ─────────────────────────────────────────
 
-export async function uploadSitePhoto(file: File, projectId: string): Promise<string> {
+export async function uploadSitePhoto(file: File, organizationId: string, projectId: string, milestoneId: string): Promise<string> {
   const fileExt = file.name.split('.').pop();
-  const fileName = `${projectId}/${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+  const fileName = `${organizationId}/${projectId}/${milestoneId}/${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
 
   const { data, error } = await supabase.storage
     .from('site-photos')
@@ -232,7 +287,7 @@ export async function uploadSitePhoto(file: File, projectId: string): Promise<st
 export async function requestPasswordReset(email: string) {
   // Use the same base as API_BASE but replace /api with /auth
   const base = API_BASE.replace(/\/api$/, '/auth');
-  
+
   const res = await fetch(`${base}/reset-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -258,10 +313,27 @@ export interface Profile {
   updated_at: string;
 }
 
+export interface ManagerDashboardProject {
+  id: string;
+  title: string;
+  completionPercent: number;
+  overdueMilestones: number;
+  pendingApprovals: number;
+  latestActivityAt: string | null;
+  endDate: string;
+}
+
+export interface DashboardResponse {
+  items: ManagerDashboardProject[];
+  nextCursor?: string;
+  totalCount: number;
+}
+
 export type ProjectStatus = 'On Track' | 'Delayed' | 'Completed';
 
 export interface Project {
   id: string;
+  organization_id: string;
   name: string;
   address: string;
   type: 'Residential' | 'Commercial';
@@ -291,9 +363,14 @@ export interface Milestone {
   weight: number;
   percent_done: number;
   sort_order: number;
+  status?: string;          // Milestone workflow status
+  schedule_status?: string; // Derived operational schedule status
+  start_date?: string;
+  due_date?: string;
   last_update: string | null;
   thumbnail_url: string | null;
   created_at: string;
+  version_number: number;
 }
 
 export interface MilestoneUpdate {
@@ -305,6 +382,11 @@ export interface MilestoneUpdate {
   photo_urls: string[];
   latitude: number | null;
   longitude: number | null;
+  review_status: 'pending' | 'approved' | 'rejected' | 'superseded' | 'changes_requested' | 'rework_required';
+  approval_notes?: string;
+  rejection_reason?: string;
+  rejection_category?: string;
+  submitted_for_review_at?: string;
   created_at: string;
   agent: { id: string; name: string };
 }
@@ -329,7 +411,7 @@ export interface Notification {
   user_id: string;
   title: string;
   body: string | null;
-  type: 'update' | 'assignment' | 'delay' | 'system';
+  type: 'update' | 'assignment' | 'delay' | 'system' | 'update_pending' | 'update_approved' | 'update_rejected';
   reference_id: string | null;
   is_read: boolean;
   created_at: string;
@@ -357,7 +439,7 @@ export interface CreateProjectPayload {
   client: string;
   managerId?: string;
   agentIds?: string[];
-  milestones?: { name: string; weight: number }[];
+  milestones?: { name: string; weight: number; dueDate?: string }[];
   templateId?: string;
 }
 

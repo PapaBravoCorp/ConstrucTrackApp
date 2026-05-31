@@ -154,10 +154,12 @@ export function ReviewModal({
                 className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
               >
                 <option value="">Select a category (optional)</option>
-                <option value="Quality">Quality Control</option>
-                <option value="Safety">Safety Violation</option>
-                <option value="Incomplete">Incomplete Work</option>
-                <option value="Documentation">Missing Documentation</option>
+                <option value="work_incomplete">Incomplete Work</option>
+                <option value="incorrect_photo">Incorrect Photo</option>
+                <option value="quantity_mismatch">Quantity Mismatch</option>
+                <option value="safety_concern">Safety Concern</option>
+                <option value="clarification_needed">Clarification Needed</option>
+                <option value="scope_deviation">Scope Deviation</option>
               </select>
             </div>
           )}

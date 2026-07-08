@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router';
 import {
@@ -475,6 +476,118 @@ function Features() {
   );
 }
 
+// ─── Video Configuration & Hooks ────────────────────────────────────────────────
+
+const STORAGE_BUCKET_URL = import.meta.env.VITE_SUPABASE_STORAGE_URL || '';
+const VIDEO_URL = STORAGE_BUCKET_URL ? `${STORAGE_BUCKET_URL}/assets/demo-track.mp4` : '/assets/demo-track.mp4';
+const POSTER_URL = STORAGE_BUCKET_URL ? `${STORAGE_BUCKET_URL}/assets/demo-poster.webp` : '/assets/demo-poster.webp';
+
+function useVideoIntersectionObserver(options: IntersectionObserverInit = {}) {
+  const [isIntersecting, setIsIntersecting] = useState(false);
+  const elementRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const element = elementRef.current;
+    if (!element) return;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      setIsIntersecting(entry.isIntersecting);
+    }, { rootMargin: '0px', threshold: 0.5, ...options });
+
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [options.root, options.rootMargin, options.threshold]);
+
+  return { isIntersecting, elementRef };
+}
+
+function usePrefersReducedMotion() {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReducedMotion(mediaQuery.matches);
+    
+    const handler = (event: MediaQueryListEvent) => {
+      setPrefersReducedMotion(event.matches);
+    };
+    
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handler);
+    } else if (mediaQuery.addListener) {
+      mediaQuery.addListener(handler);
+    }
+    
+    return () => {
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener('change', handler);
+      } else if (mediaQuery.removeListener) {
+        mediaQuery.removeListener(handler);
+      }
+    };
+  }, []);
+
+  return prefersReducedMotion;
+}
+
+function LandingVideo() {
+  const { isIntersecting, elementRef } = useVideoIntersectionObserver();
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!videoRef.current || prefersReducedMotion) return;
+
+    if (isIntersecting) {
+      if (!hasLoaded) {
+        videoRef.current.load();
+        setHasLoaded(true);
+      }
+      
+      const playPromise = videoRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          // Auto-play was prevented by browser policy
+        });
+      }
+    } else {
+      videoRef.current.pause();
+      if (hasLoaded) {
+        videoRef.current.currentTime = 0; // Reset video to start
+      }
+    }
+  }, [isIntersecting, prefersReducedMotion, hasLoaded]);
+
+  return (
+    <div ref={elementRef} className="aspect-video w-full h-full bg-slate-900 relative">
+      <video
+        ref={videoRef}
+        className="w-full h-full object-cover"
+        controls={true}
+        muted={true}
+        loop={true}
+        playsInline={true}
+        preload="metadata"
+        poster={POSTER_URL}
+        aria-label="ConstrucTrack platform demonstration video"
+        tabIndex={0}
+      >
+        {(isIntersecting || hasLoaded) && (
+          <source src={VIDEO_URL} type="video/mp4" />
+        )}
+        <p className="text-white p-4 text-center">
+          Your browser does not support the video tag. You can{' '}
+          <a href={VIDEO_URL} className="text-orange-400 hover:underline focus:outline-none focus:ring-2 focus:ring-orange-500 rounded">
+            download the video here
+          </a>.
+        </p>
+      </video>
+    </div>
+  );
+}
+
 // ─── How It Works ─────────────────────────────────────────────────────────────
 function HowItWorks() {
   const steps = [
@@ -578,19 +691,8 @@ function HowItWorks() {
                 </div>
               </div>
               {/* Video */}
-              <div className="aspect-video">
-                <video
-                  className="w-full h-full object-cover"
-                  controls
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                  poster="https://images.unsplash.com/photo-1541888081048-c7ca7df28a38?q=80&w=1200&auto=format&fit=crop"
-                >
-                  <source src="assets\demo-ctrack.mp4" type="video/mp4" />
-                  Your browser does not support the video tag.
-                </video>
+              <div className="aspect-video w-full h-full">
+                <LandingVideo />
               </div>
             </div>
           </div>

@@ -5,9 +5,10 @@
 import { supabase } from './supabaseClient';
 import { projectId } from '../../utils/supabase/info';
 
-const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const API_BASE = isLocal 
-  ? `http://localhost:8000/server/api` 
+// const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const isLocal = false;
+const API_BASE = isLocal
+  ? `http://localhost:8000/server/api`
   : `https://${projectId}.supabase.co/functions/v1/server/api`;
 
 // ─── Helpers ─────────────────────────────────────────────

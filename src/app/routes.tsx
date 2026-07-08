@@ -18,6 +18,7 @@ import { AgentProjectDetail } from "./pages/agent/ProjectDetail";
 import { UpdateProgress } from "./pages/agent/UpdateProgress";
 
 export const router = createBrowserRouter([
+
   {
     path: "/",
     Component: LandingPage,

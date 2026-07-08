@@ -3,6 +3,7 @@ import { AppShell } from "./components/AppShell";
 import { RoleGuard } from "./components/RoleGuard";
 import { Login } from "./pages/Login";
 import { ResetPassword } from "./pages/ResetPassword";
+import { LandingPage } from "./pages/LandingPage";
 import { AdminDashboard } from "./pages/admin/Dashboard";
 import { ProjectList as AdminProjectList } from "./pages/admin/ProjectList";
 import { CreateProject } from "./pages/admin/CreateProject";
@@ -19,6 +20,10 @@ import { UpdateProgress } from "./pages/agent/UpdateProgress";
 export const router = createBrowserRouter([
   {
     path: "/",
+    Component: LandingPage,
+  },
+  {
+    path: "/login",
     Component: Login,
   },
   {

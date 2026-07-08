@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Plus, Search, MapPin, Calendar, Building, Edit, Trash2, Loader2 } from 'lucide-react';
-import { useProjects } from '../../projectsContext';
+import { useProjects } from '../../useProjects';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import type { ProjectStatus } from '../../api';

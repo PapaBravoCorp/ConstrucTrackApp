@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../../auth';
-import { useProjects } from '../../projectsContext';
+import { useProjects } from '../../useProjects';
 import { fetchProject } from '../../api';
 import type { ProjectDetail, MilestoneWithUpdates, MilestoneUpdate } from '../../api';
 import {

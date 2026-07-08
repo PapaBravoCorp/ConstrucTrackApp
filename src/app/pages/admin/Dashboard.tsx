@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router';
 import { Building, LayoutTemplate, Users, ChevronRight, Clock, History } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useProjects } from '../../projectsContext';
+import { useProjects } from '../../useProjects';
 
 export function AdminDashboard() {
   const { projects } = useProjects();

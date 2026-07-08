@@ -1,7 +1,7 @@
 import React from 'react';
 import { Outlet, Navigate, useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../auth';
-import { User as UserIcon, LogOut, ArrowLeft } from 'lucide-react';
+import { User as UserIcon, LogOut, ArrowLeft, HardHat } from 'lucide-react';
 import { NotificationPanel } from './NotificationPanel';
 import { toast } from 'sonner';
 
@@ -37,7 +37,7 @@ export function AppShell() {
   }
 
   if (!user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   // Determine if we are not at the root role path to show back button
@@ -52,11 +52,13 @@ export function AppShell() {
               <ArrowLeft className="w-5 h-5 text-gray-700" />
             </button>
           ) : (
-            <div className="w-8 h-8 rounded-md bg-blue-600 flex items-center justify-center text-white font-bold text-lg">
-              C
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-orange-500 to-amber-400 flex items-center justify-center shadow-md">
+              <HardHat className="w-4 h-4 text-white" />
             </div>
           )}
-          <span className="font-semibold text-lg text-slate-900 tracking-tight">ConstrucTrack</span>
+          <span className="font-bold text-lg text-slate-900 tracking-tight">
+            Construc<span className="text-orange-500">Track</span>
+          </span>
         </div>
         
         <div className="flex items-center gap-2">

@@ -4,7 +4,7 @@ import {
   Search, Clock, AlertTriangle, CheckCircle, BarChart3,
   ChevronRight, RotateCcw, Inbox, Calendar, AlertOctagon, CheckCircle2
 } from 'lucide-react';
-import { useProjects } from '../../projectsContext';
+import { useProjects } from '../../useProjects';
 import { fetchManagerDashboard, approveMilestoneUpdate, requestChanges, requestRework } from '../../api';
 import type { ManagerDashboardProject, Milestone } from '../../api';
 import { supabase } from '../../supabaseClient';

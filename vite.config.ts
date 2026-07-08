@@ -31,6 +31,12 @@ export default defineConfig({
     },
   },
 
+  server: {
+    allowedHosts: [
+      'kindliest-charlene-circularly.ngrok-free.dev',
+    ]
+  },
+
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })

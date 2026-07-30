@@ -12,6 +12,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { differenceInDays } from 'date-fns';
 import { ReviewModal } from '../../components/ReviewModal';
+import { WelcomeModal } from '../../components/WelcomeModal';
+import { EmptyState } from '../../components/EmptyState';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 type DashboardTab = 'projects' | 'reviewQueue';
 
@@ -49,6 +52,7 @@ function getStallThreshold(milestoneName: string): number {
 }
 
 export function ManagerDashboard() {
+  usePageTitle('Manager Dashboard');
   const { projects, loading } = useProjects();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<DashboardTab>('projects');
@@ -307,6 +311,7 @@ export function ManagerDashboard() {
 
   return (
     <>
+    <WelcomeModal />
     <div className="p-4 md:p-6 pb-20 max-w-4xl mx-auto">
       {isStale && (
         <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm font-medium rounded-lg flex items-center gap-2 border border-red-200">
@@ -390,7 +395,7 @@ export function ManagerDashboard() {
             activeTab === 'projects' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
           }`}
         >
-          Operational Feed
+          My Projects
         </button>
         <button
           onClick={() => setActiveTab('reviewQueue')}
@@ -524,11 +529,11 @@ export function ManagerDashboard() {
             })}
 
             {filteredProjects.length === 0 && (
-              <div className="text-center py-16 bg-white rounded-2xl border border-gray-200">
-                <BarChart3 className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <h3 className="text-base font-bold text-gray-900">No projects found</h3>
-                <p className="text-gray-500 mt-1 text-sm font-medium">You haven't been assigned to any projects yet.</p>
-              </div>
+              <EmptyState
+                icon={<BarChart3 className="w-8 h-8 text-gray-400" />}
+                title="No projects found"
+                description="You haven't been assigned to any projects yet. Projects will appear here once an admin assigns you."
+              />
             )}
           </div>
         </>
@@ -592,7 +597,7 @@ export function ManagerDashboard() {
                       onClick={() => { setReviewModal({ updateId: item.updateId, type: 'changes_requested', projectId: item.projectId, title: `Changes Requested: ${item.milestoneName}` }); }}
                       className="bg-white border border-orange-200 text-orange-700 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-orange-50 active:scale-95 transition-all"
                     >
-                      Changes
+                      Request Changes
                     </button>
                     <button
                       onClick={() => { setReviewModal({ updateId: item.updateId, type: 'rework_required', projectId: item.projectId, title: `Rework Required: ${item.milestoneName}` }); }}

@@ -128,30 +128,30 @@ export function ReviewModal({
     >
       <div 
         ref={modalRef}
-        className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh]"
+        className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh]"
       >
-        <div className="p-6 border-b border-zinc-200 dark:border-zinc-800">
-          <h2 id="modal-title" className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+        <div className="p-6 border-b border-zinc-200">
+          <h2 id="modal-title" className="text-xl font-semibold text-zinc-900">
             {title}
           </h2>
         </div>
         
         <div className="p-6 flex-1 overflow-y-auto">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg text-sm border border-red-100 dark:border-red-800/50">
+            <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm border border-red-100">
               {error}
             </div>
           )}
           
           {showCategory && (
             <div className="mb-4">
-              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+              <label className="block text-sm font-medium text-zinc-700 mb-1">
                 Category
               </label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+                className="w-full px-3 py-2 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-zinc-900"
               >
                 <option value="">Select a category (optional)</option>
                 <option value="work_incomplete">Incomplete Work</option>
@@ -165,24 +165,24 @@ export function ReviewModal({
           )}
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+            <label className="block text-sm font-medium text-zinc-700 mb-1">
               {reviewType === 'approve' ? 'Approval Notes (Optional)' : 'Feedback / Reason (Required)'}
             </label>
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
               disabled={isSubmitting}
-              className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 h-32 resize-none"
+              className="w-full px-3 py-2 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-zinc-900 h-32 resize-none"
               placeholder={reviewType === 'approve' ? 'Looks good...' : 'Please explain what needs to be fixed...'}
             />
           </div>
         </div>
         
-        <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 flex justify-end gap-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-b-xl">
+        <div className="p-6 border-t border-zinc-200 flex justify-end gap-3 bg-zinc-50 rounded-b-xl">
           <button
             onClick={onClose}
             disabled={isSubmitting}
-            className="px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 rounded-lg transition-colors"
           >
             Cancel
           </button>

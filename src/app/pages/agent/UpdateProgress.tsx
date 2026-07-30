@@ -150,7 +150,7 @@ export function UpdateProgress() {
   };
 
   if (loading) {
-    return <div className="p-10 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>;
+    return <div className="p-10 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>;
   }
 
   const milestone = project?.milestones?.find(m => m.id === milestoneId);
@@ -201,7 +201,7 @@ export function UpdateProgress() {
           <p className="text-sm text-gray-500 mt-1">{project.name}</p>
           {milestone.updates?.some(u => u.review_status === 'pending') && (
             <div className="mt-3 inline-block bg-yellow-50 text-yellow-800 text-xs px-2 py-1.5 rounded-lg border border-yellow-200 font-medium shadow-sm">
-              You have a pending update in review. Submitting again will safely supersede it.
+              You have a pending update in review. Your new submission will replace the pending one.
             </div>
           )}
         </div>
@@ -211,6 +211,7 @@ export function UpdateProgress() {
             onClick={handleStartWork}
             disabled={isSubmitting}
             className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-200 transition-colors"
+            title="Mark this milestone as In Progress so you can begin submitting updates"
           >
             Start Work
           </button>
@@ -234,10 +235,11 @@ export function UpdateProgress() {
       <form onSubmit={handleConfirmSubmit} className="space-y-6">
         {/* Progress Slider */}
         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-          <div className="flex justify-between items-end mb-4">
+          <div className="flex justify-between items-end mb-2">
             <label className="block text-sm font-semibold text-gray-900">Completion Level</label>
             <span className="text-2xl font-bold text-blue-600">{percentDone}%</span>
           </div>
+          <p className="text-xs text-gray-500 mb-3">Previous progress: {milestone.percent_done}%</p>
           <input 
             type="range" 
             min="0" 

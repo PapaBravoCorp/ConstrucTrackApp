@@ -5,8 +5,11 @@ import { useProjects } from '../../useProjects';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import type { ProjectStatus } from '../../api';
+import { EmptyState } from '../../components/EmptyState';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 export function ProjectList() {
+  usePageTitle('Projects');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'All'>('All');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -157,18 +160,13 @@ export function ProjectList() {
         ))}
 
         {filteredProjects.length === 0 && (
-          <div className="text-center py-12 bg-white rounded-xl border border-gray-200 border-dashed">
-            <Building className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <h3 className="text-lg font-medium text-gray-900">No projects found</h3>
-            <p className="text-gray-500 mt-1">
-              {projects.length === 0 ? 'Get started by creating your first project.' : 'Try adjusting your search terms.'}
-            </p>
-            {projects.length === 0 && (
-              <Link to="/admin/projects/new" className="inline-flex items-center gap-2 mt-4 text-blue-600 font-medium hover:text-blue-700">
-                <Plus className="w-4 h-4" /> Create Project
-              </Link>
-            )}
-          </div>
+          <EmptyState
+            icon={<Building className="w-8 h-8 text-gray-400" />}
+            title="No projects found"
+            description={projects.length === 0 ? 'Get started by creating your first project.' : 'Try adjusting your search terms or filters.'}
+            actionLabel={projects.length === 0 ? 'Create Project' : undefined}
+            actionLink={projects.length === 0 ? '/admin/projects/new' : undefined}
+          />
         )}
       </div>
 

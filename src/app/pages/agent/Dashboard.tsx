@@ -14,6 +14,9 @@ import {
   isToday, isThisWeek, isThisMonth, isBefore, startOfDay,
   addWeeks, startOfWeek, endOfWeek, differenceInDays, differenceInHours, formatDistanceToNowStrict
 } from 'date-fns';
+import { WelcomeModal } from '../../components/WelcomeModal';
+import { EmptyState } from '../../components/EmptyState';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -22,7 +25,7 @@ function getGreeting() {
   return 'Good evening';
 }
 
-type DueFilter = 'all' | 'overdue' | 'today' | 'thisWeek' | 'nextWeek' | 'thisMonth' | 'rework' | 'inReview';
+type DueFilter = 'all' | 'overdue' | 'today' | 'thisWeek' | 'nextWeek' | 'thisMonth' | 'rework' | 'inReview' | 'needsUpdate';
 
 interface TaskItem {
   milestoneId: string;
@@ -126,6 +129,7 @@ const FILTER_LABELS: { key: DueFilter; label: string }[] = [
 ];
 
 export function AgentDashboard() {
+  usePageTitle('My Tasks');
   const { user } = useAuth();
   const { projects, loading: projectsLoading } = useProjects();
   const [projectDetails, setProjectDetails] = useState<ProjectDetail[]>([]);
@@ -228,6 +232,13 @@ export function AgentDashboard() {
           return task.latestUpdate && ['changes_requested', 'rework_required'].includes(task.latestUpdate.review_status);
         case 'inReview':
           return task.latestUpdate?.review_status === 'pending';
+        case 'needsUpdate': {
+          const rs = task.latestUpdate?.review_status;
+          if (rs === 'pending') return false;
+          if (rs && ['changes_requested', 'rework_required'].includes(rs)) return false;
+          if (task.dueDate && isBefore(new Date(task.dueDate), startOfDay(now))) return false;
+          return !['Completed', 'Archived'].includes(task.status);
+        }
         default:
           return true;
       }
@@ -251,10 +262,12 @@ export function AgentDashboard() {
   }, [allTasks]);
 
   if (loading || projectsLoading) {
-    return <div className="p-10 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-600" /></div>;
+    return <div className="p-10 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>;
   }
 
   return (
+    <>
+    <WelcomeModal />
     <div className="p-4 pb-24 md:p-6 min-h-screen bg-gray-50">
       {/* Greeting */}
       <div className="mb-5 flex justify-between items-center bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
@@ -292,7 +305,7 @@ export function AgentDashboard() {
           </div>
           <p className={`text-2xl font-bold ${counters.overdue > 0 ? 'text-orange-600' : 'text-gray-400'}`}>{counters.overdue}</p>
         </button>
-        <button onClick={() => setActiveFilter('all')} className={`bg-white p-3.5 rounded-xl border shadow-sm text-left transition-all ${activeFilter === 'all' ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-200 hover:border-blue-300'}`}>
+        <button onClick={() => setActiveFilter('needsUpdate')} className={`bg-white p-3.5 rounded-xl border shadow-sm text-left transition-all ${activeFilter === 'needsUpdate' ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-200 hover:border-blue-300'}`}>
           <div className="flex items-center gap-2 mb-1">
             <Camera className="w-4 h-4 text-blue-500" />
             <p className="text-xs font-medium text-gray-500">Needs Update</p>
@@ -482,12 +495,13 @@ export function AgentDashboard() {
       </AnimatePresence>
 
       {projects.length === 0 && (
-        <div className="text-center py-12 bg-white rounded-2xl border border-gray-200">
-          <Navigation className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <h3 className="text-lg font-medium text-gray-900">No sites assigned</h3>
-          <p className="text-gray-500 text-sm mt-1">You currently have no active sites.</p>
-        </div>
+        <EmptyState
+          icon={<Navigation className="w-8 h-8 text-gray-400" />}
+          title="No sites assigned"
+          description="You currently have no active sites. Your manager will assign you to a project."
+        />
       )}
     </div>
+    </>
   );
 }

@@ -3,8 +3,11 @@ import { Link } from 'react-router';
 import { Building, LayoutTemplate, Users, ChevronRight, Clock, History } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useProjects } from '../../useProjects';
+import { WelcomeModal } from '../../components/WelcomeModal';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 export function AdminDashboard() {
+  usePageTitle('Admin Dashboard');
   const { projects } = useProjects();
 
   const activeCount = projects.filter(p => p.status !== 'Completed').length;
@@ -43,6 +46,8 @@ export function AdminDashboard() {
   ];
 
   return (
+    <>
+    <WelcomeModal />
     <div className="p-4 md:p-6 pb-20">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Admin Operations</h1>
@@ -102,5 +107,6 @@ export function AdminDashboard() {
         </div>
       </div>
     </div>
+    </>
   );
 }

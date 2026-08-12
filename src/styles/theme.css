@@ -3,7 +3,31 @@
 @theme {
   --font-sans: 'Inter', sans-serif;
   --font-heading: 'Poppins', sans-serif;
+
+  /* Core design tokens for shadcn/ui primitives */
+  --color-background: #ffffff;
+  --color-foreground: #0f172a;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0f172a;
+  --color-border: #e2e8f0;
+  --color-input: #e2e8f0;
+  --color-ring: #3b82f6;
+  --color-accent: #f1f5f9;
+  --color-accent-foreground: #0f172a;
+
+  /* Sidebar theme colors for shadcn/ui sidebar component */
+  --color-sidebar: #ffffff;
+  --color-sidebar-foreground: #1e293b;
+  --color-sidebar-border: #e2e8f0;
+  --color-sidebar-accent: #f1f5f9;
+  --color-sidebar-accent-foreground: #1e293b;
+  --color-sidebar-ring: #3b82f6;
+  --color-sidebar-primary: #ea580c;
+  --color-sidebar-primary-foreground: #ffffff;
 }
+
 
 @layer base {
   html, body {

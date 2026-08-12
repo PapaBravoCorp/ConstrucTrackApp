@@ -4,8 +4,10 @@ import { fetchUsers, createUser, updateUser, deleteUser } from '../../api';
 import type { Profile, Role } from '../../api';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 export function UserManagement() {
+  usePageTitle('Users & Roles');
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');

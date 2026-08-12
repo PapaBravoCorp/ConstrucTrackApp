@@ -3,8 +3,10 @@ import { fetchActivityLog } from '../../api';
 import type { ActivityLogEntry } from '../../api';
 import { Clock, Users, Building, LayoutTemplate, Milestone, Filter, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 export function ActivityLog() {
+  usePageTitle('Activity Log');
   const [entries, setEntries] = useState<ActivityLogEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);

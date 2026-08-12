@@ -360,10 +360,10 @@ function SocialProof() {
         </FadeIn>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-8 text-center">
           {[
-            { val: 500, suffix: '+', label: 'Projects Tracked' },
+            { val: 15, suffix: '+', label: 'Projects Tracked' },
             { val: 98, suffix: '%', label: 'On-Time Delivery Rate' },
-            { val: 12000, suffix: '+', label: 'Milestones Completed' },
-            { val: 40, suffix: '%', label: 'Less Delay Incidents' },
+            { val: 12, suffix: '+', label: 'Milestones Completed' },
+            { val: 10, suffix: '%', label: 'Less Delay Incidents' },
           ].map((stat, i) => (
             <FadeIn key={stat.label} delay={i * 0.1}>
               <div className="relative">
@@ -508,17 +508,17 @@ function usePrefersReducedMotion() {
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     setPrefersReducedMotion(mediaQuery.matches);
-    
+
     const handler = (event: MediaQueryListEvent) => {
       setPrefersReducedMotion(event.matches);
     };
-    
+
     if (mediaQuery.addEventListener) {
       mediaQuery.addEventListener('change', handler);
     } else if (mediaQuery.addListener) {
       mediaQuery.addListener(handler);
     }
-    
+
     return () => {
       if (mediaQuery.removeEventListener) {
         mediaQuery.removeEventListener('change', handler);
@@ -545,7 +545,7 @@ function LandingVideo() {
         videoRef.current.load();
         setHasLoaded(true);
       }
-      
+
       const playPromise = videoRef.current.play();
       if (playPromise !== undefined) {
         playPromise.catch(() => {

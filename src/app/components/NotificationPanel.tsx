@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Bell, CheckCheck, X, Building, Users, AlertTriangle, Settings } from 'lucide-react';
+import { Bell, CheckCheck, X, Building, Users, AlertTriangle, Settings, RefreshCw } from 'lucide-react';
 import { fetchNotifications, markNotificationRead, markAllNotificationsRead } from '../api';
 import type { Notification } from '../api';
 import { useAuth } from '../auth';
@@ -11,6 +11,7 @@ export function NotificationPanel() {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [fetchError, setFetchError] = useState(false);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
   const bellButtonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -82,21 +83,27 @@ export function NotificationPanel() {
       const result = await fetchNotifications();
       setNotifications(result.data);
       setUnreadCount(result.unreadCount);
+      setFetchError(false);
     } catch (err) {
       console.error('Failed to load notifications:', err);
+      setFetchError(true);
     }
   };
 
   const handleNotificationClick = async (notif: Notification) => {
-    if (!notif.is_read) {
-      await markNotificationRead(notif.id);
-      setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n));
-      setUnreadCount(prev => Math.max(0, prev - 1));
-    }
-    if (notif.reference_id && user) {
-      const rolePrefix = user.role === 'Admin' ? '/admin' : user.role === 'Manager' ? '/manager' : '/agent';
-      setOpen(false);
-      navigate(`${rolePrefix}/projects/${notif.reference_id}`);
+    try {
+      if (!notif.is_read) {
+        await markNotificationRead(notif.id);
+        setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n));
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      }
+      if (notif.reference_id && user) {
+        const rolePrefix = user.role === 'Admin' ? '/admin' : user.role === 'Manager' ? '/manager' : '/agent';
+        setOpen(false);
+        navigate(`${rolePrefix}/projects/${notif.reference_id}`);
+      }
+    } catch (err) {
+      console.error('Failed to handle notification click:', err);
     }
   };
 
@@ -171,7 +178,19 @@ export function NotificationPanel() {
 
           {/* Notification list — max-height ~70vh, scrolls independently */}
           <div className="max-h-[70vh] overflow-y-auto divide-y divide-gray-50">
-            {notifications.length > 0 ? (
+            {fetchError ? (
+              <div className="py-12 text-center text-gray-400">
+                <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-orange-300" />
+                <p className="text-sm font-medium text-gray-500">Couldn't load notifications</p>
+                <button
+                  onClick={loadNotifications}
+                  className="mt-3 inline-flex items-center gap-1.5 text-xs text-blue-600 font-medium hover:text-blue-700"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Try again
+                </button>
+              </div>
+            ) : notifications.length > 0 ? (
               notifications.map((notif) => (
                 <button
                   key={notif.id}

@@ -4,10 +4,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { fetchTemplates, createTemplate, updateTemplate, deleteTemplate } from '../../api';
 import type { Template } from '../../api';
 import { toast } from 'sonner';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 interface PhaseItem { name: string; weight: number; }
 
 export function TemplatesLibrary() {
+  usePageTitle('Templates');
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);

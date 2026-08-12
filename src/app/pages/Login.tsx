@@ -5,8 +5,10 @@ import { Loader2, HardHat, ArrowLeft, ShieldCheck, Lock, Globe } from 'lucide-re
 import { motion } from 'motion/react';
 import { supabase } from '../supabaseClient';
 import { toast } from 'sonner';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 export function Login() {
+  usePageTitle('Sign In');
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 

@@ -21,6 +21,7 @@ import {
   SidebarHeader,
   SidebarFooter,
   SidebarRail,
+  useSidebar,
 } from './ui/sidebar';
 
 interface NavItem {
@@ -57,6 +58,13 @@ function getNavItems(role: string): NavItem[] {
 export function AppSidebar() {
   const { user } = useAuth();
   const location = useLocation();
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  React.useEffect(() => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  }, [location, isMobile, setOpenMobile]);
 
   if (!user) return null;
 
@@ -104,6 +112,7 @@ export function AppSidebar() {
                     asChild
                     isActive={isActive(item.path)}
                     tooltip={item.label}
+                    onClick={() => setOpenMobile(false)}
                   >
                     <Link to={item.path}>
                       <item.icon />

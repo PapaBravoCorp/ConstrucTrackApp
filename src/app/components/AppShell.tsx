@@ -64,21 +64,18 @@ export function AppShell() {
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               {/* Sidebar toggle trigger for mobile / collapse */}
               <SidebarTrigger className="-ml-1 shrink-0" />
-              {!isRootRolePath ? (
+              {!isRootRolePath && (
                 <button onClick={() => navigate(-1)} className="p-2 -ml-1 rounded-full hover:bg-gray-100 transition-colors shrink-0">
                   <ArrowLeft className="w-5 h-5 text-gray-700" />
                 </button>
-              ) : (
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-orange-500 to-amber-400 flex items-center justify-center shadow-md shrink-0 md:hidden">
-                  <HardHat className="w-4 h-4 text-white" />
-                </div>
               )}
-              <span className="font-bold text-lg text-slate-900 tracking-tight shrink-0">
+              {/* Product Name - hidden on mobile to simplify header */}
+              <span className="hidden sm:inline font-bold text-lg text-slate-900 tracking-tight shrink-0">
                 Construc<span className="text-orange-500">Track</span>
               </span>
               {/* Role badge */}
               <span
-                className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border shrink-0 ${roleBadgeStyle}`}
+                className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border shrink-0 max-w-[96px] sm:max-w-none truncate ${roleBadgeStyle}`}
                 role="status"
                 aria-label={`Current role: ${user.role}`}
               >
